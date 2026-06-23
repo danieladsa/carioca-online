@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carioca Online</title>
+<script src="/socket.io/socket.io.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --felt: #1a4a2e;
+  --felt2: #163d26;
+  --gold: #c9a84c;
+  --gold2: #e8c96d;
+  --cream: #f5f0e8;
+  --red: #c0392b;
+  --dark: #0d1f14;
+  --card-w: 50px;
+  --card-h: 72px;
+  --radius: 7px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--felt);
+  background-image:
+    radial-gradient(ellipse at 30% 20%, #1e5535 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 80%, #122b1c 0%, transparent 60%);
+  font-family: 'DM Mono', monospace;
+  color: var(--cream);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Pantallas ── */
+#screen-lobby, #screen-game { width: 100%; min-height: 100vh; }
+#screen-lobby {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 24px; padding: 40px 20px;
+}
+#screen-game { display: none; flex-direction: column; height: 100vh; }
+
+h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 3.2rem; font-weight: 900;
+  color: var(--gold);
+  text-shadow: 0 2px 20px rgba(201,168,76,0.4);
+  letter-spacing: 0.06em;
+}
+.subtitle { color: rgba(245,240,232,0.5); font-size: 0.8rem; letter-spacing: 0.15em; }
+
+/* ── Lobby ── */
+.lobby-box {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(201,168,76,0.3);
+  border-radius: 16px;
+  padding: 32px;
+  width: 100%; max-width: 420px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.lobby-box h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem; color: var(--gold2);
+  margin-bottom: 4px;
+}
+input {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(201,168,76,0.4);
+  border-radius: 8px;
+  color: var(--cream);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.95rem;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus { border-color: var(--gold); }
+input::placeholder { color: rgba(245,240,232,0.3); }
+.btn {
+  background: linear-gradient(135deg, var(--gold), #a0762e);
+  border: none; border-radius: 8px;
+  color: var(--dark); font-family: 'DM Mono', monospace;
+  font-size: 0.9rem; font-weight: 500;
+  padding: 12px 20px; cursor: pointer;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn:active { transform: scale(0.98); }
+.btn-outline {
+  background: transparent;
+  border: 1px solid rgba(201,168,76,0.5);
+  color: var(--gold2);
+}
+.btn-outline:hover { background: rgba(201,168,76,0.1); }
+.btn-sm { padding: 7px 14px; font-size: 0.78rem; }
+.btn-red { background: linear-gradient(135deg, #c0392b, #922b21); color: #fff; }
+.divider { text-align: center; color: rgba(245,240,232,0.25); font-size: 0.75rem; letter-spacing: 0.2em; }
+
+#lista-jugadores { display: flex; flex-direction: column; gap: 8px; }
+.jugador-item {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(201,168,76,0.2);
+  border-radius: 8px; padding: 8px 12px;
+  font-size: 0.85rem; display: flex; align-items: center; gap: 8px;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; flex-shrink: 0; }
+
+#msg-error {
+  background: rgba(192,57,43,0.2); border: 1px solid rgba(192,57,43,0.5);
+  border-radius: 8px; padding: 10px 14px; font-size: 0.82rem; color: #ff8a7a;
+  display: none;
+}
+
+/* ── Game layout ── */
+/* Sin navbar sólido: título + info flotan sobre la mesa */
+#game-header {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 26px;
+  background: transparent;
+  z-index: 40; pointer-events: none;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.85);
+}
+#game-header h1, #game-header .header-info { pointer-events: auto; }
+#game-header h1 { font-size: 1.3rem; }
+.header-info { display: flex; gap: 16px; align-items: center; font-size: 0.78rem; color: rgba(245,240,232,0.88); }
+.ronda-badge {
+  background: rgba(201,168,76,0.2); border: 1px solid var(--gold);
+  border-radius: 6px; padding: 4px 12px;
+  color: var(--gold); font-size: 0.8rem;
+}
+
+/* ── Mesa ── */
+#mesa {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; min-height: 0;
+  background: url("/fondo2.png") center center / 100% 100% no-repeat;
+}
+
+/* Tablero tipo mesa (grid: cada jugador en su celda, nadie se superpone al mazo) */
+#tablero {
+  flex: 1; position: relative; margin: 2.5% 7% 0;
+  background: transparent;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 1.4fr minmax(150px, 1fr);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "left top    right"
+    "left center right"
+    "left mine   right";
+  gap: 6px; padding: 4px 16px 150px;
+}
+/* Resplandor bajo el mazo */
+#tablero::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px; height: 300px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(232,201,109,0.22) 0%, rgba(232,201,109,0.05) 45%, transparent 72%);
+  pointer-events: none; z-index: 0;
+}
+
+/* Celdas alrededor de la mesa */
+.celda { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; z-index: 2; }
+.celda-top   { grid-area: top;   align-items: center;     justify-content: flex-start; }
+.celda-left  { grid-area: left;  align-items: flex-start; justify-content: center; }
+.celda-right { grid-area: right; align-items: flex-end;   justify-content: center; }
+.celda-center{ grid-area: center; display: flex; align-items: center; justify-content: center; z-index: 3; }
+.celda-mine  { grid-area: mine;  align-items: center; justify-content: flex-end; }
+.sin-oponentes { font-size: 0.78rem; color: rgba(245,240,232,0.45); text-align: center; width: 100%; }
+
+/* Grupo de combos de un jugador */
+.meld-group { display: flex; flex-direction: column; gap: 6px; }
+.meld-group-combos { display: flex; gap: 12px; flex-wrap: wrap; }
+.celda-left  .meld-group-combos { justify-content: flex-start; }
+.celda-right .meld-group-combos { justify-content: flex-end; }
+.celda-top   .meld-group-combos,
+.celda-mine  .meld-group-combos { justify-content: center; }
+
+/* Insignia de jugador (compacta) */
+.seat {
+  width: auto; max-width: 320px;
+  background: #0d1f16;
+  border: 1px solid rgba(201,168,76,0.45);
+  border-radius: 14px; padding: 8px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.seat-activo {
+  border-color: var(--gold);
+  box-shadow: 0 0 22px rgba(201,168,76,0.55);
+  background: rgba(40,30,5,0.55);
+}
+
+.seat-head { display: flex; align-items: center; gap: 8px; }
+.seat-avatar {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.25rem;
+  background: linear-gradient(135deg, #2c3e50, #1a252f);
+  border: 1px solid rgba(201,168,76,0.4);
+}
+.seat-meta { min-width: 0; }
+.seat-nombre { font-size: 0.8rem; color: var(--gold2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seat-stats { font-size: 0.66rem; color: rgba(245,240,232,0.55); }
+.seat-cartas { display: flex; align-items: center; min-height: 32px; padding-left: 2px; }
+.seat-cartas .carta-dorso { margin-left: -13px; box-shadow: -1px 0 2px rgba(0,0,0,0.4); }
+.seat-cartas .carta-dorso:first-child { margin-left: 0; }
+
+.carta-dorso {
+  width: 22px; height: 32px; border-radius: 3px;
+  background: linear-gradient(135deg, #1a3a8c, #0d2460);
+  border: 1px solid rgba(255,255,255,0.2);
+  display: inline-block; flex-shrink: 0;
+}
+
+/* ── Mazo y descarte (centro de la mesa) ── */
+#zona-mazo-descarte {
+  display: flex; gap: 22px; align-items: flex-start;
+  z-index: 5;
+}
+.pila { display: flex; flex-direction: column; align-items: center; }
+.pila-label { font-size: 0.7rem; color: rgba(245,240,232,0.55); letter-spacing: 0.12em; text-align: center; margin-bottom: 6px; }
+#btn-mazo, #btn-descarte {
+  width: var(--card-w); height: var(--card-h);
+  border-radius: var(--radius);
+  cursor: pointer; border: none; transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+#btn-mazo {
+  background: linear-gradient(135deg, #1a3a8c, #0d2460);
+  border: 2px solid rgba(255,255,255,0.25);
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.3), 4px 4px 0 rgba(0,0,0,0.2), 0 6px 18px rgba(0,0,0,0.5);
+}
+#btn-mazo:hover { transform: translateY(-3px); box-shadow: 2px 2px 0 rgba(0,0,0,0.3), 4px 4px 0 rgba(0,0,0,0.2), 0 10px 26px rgba(0,0,0,0.6); }
+#btn-mazo::after {
+  content: '🂠'; font-size: 2rem; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%,-50%); color: rgba(255,255,255,0.85);
+}
+.mazo-count {
+  font-size: 0.7rem; color: rgba(245,240,232,0.6);
+  text-align: center; margin-top: 6px;
+}
+#btn-descarte {
+  background: white;
+  border: 2px solid rgba(0,0,0,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; font-weight: 700; user-select: none;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+#btn-descarte:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.6); }
+.descarte-val { font-size: 1.1rem; font-weight: 700; }
+.descarte-palo { font-size: 1.4rem; }
+
+/* ── Bajadas en mesa (combos) ── */
+.combo-area {
+  background: rgba(0,0,0,0.22);
+  border: 1px dashed rgba(201,168,76,0.35);
+  border-radius: 10px; padding: 5px 7px;
+  display: flex; gap: 4px; flex-wrap: wrap;
+  min-width: 70px; min-height: 40px;
+  cursor: pointer; transition: border-color 0.2s;
+}
+.combo-area:hover { border-color: var(--gold); }
+.combo-tipo { font-size: 0.62rem; color: rgba(245,240,232,0.4); margin-bottom: 2px; width: 100%; }
+
+/* ── Mano del jugador ── */
+/* La mano + controles flotan SOBRE la mesa (sin contenedor sólido) */
+#zona-jugador {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 4px 16px 20px;
+  background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.3) 42%, rgba(0,0,0,0) 100%);
+  z-index: 30;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+  pointer-events: none; /* el fieltro sigue clicable en los huecos */
+}
+#zona-jugador .jugador-header,
+#zona-jugador .mano-hint,
+#zona-jugador #mano-cartas,
+#zona-jugador #zona-acciones { pointer-events: auto; }
+.jugador-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.jugador-nombre-display {
+  font-size: 0.85rem; color: var(--gold2);
+  display: flex; align-items: center; gap: 8px;
+}
+.turno-indicator {
+  font-size: 0.7rem; padding: 2px 8px;
+  border-radius: 99px; font-weight: 500;
+}
+.turno-yo { background: rgba(46,204,113,0.2); color: #2ecc71; border: 1px solid rgba(46,204,113,0.4); }
+.turno-otro { background: rgba(255,255,255,0.07); color: rgba(245,240,232,0.4); border: 1px solid rgba(255,255,255,0.1); }
+.etapa-display { font-size: 0.72rem; color: rgba(245,240,232,0.45); text-align: right; }
+.etapa-num { color: var(--gold); font-weight: 500; }
+
+/* Mano compacta por defecto (abanico superpuesto) → deja más espacio a la mesa */
+#mano-cartas {
+  display: flex; flex-wrap: nowrap; justify-content: center;
+  gap: 0; margin: 0 auto 8px; max-width: 100%;
+  transform-origin: bottom center;
+  transition: transform 0.22s ease;
+}
+#mano-cartas .carta {
+  cursor: grab; touch-action: none;
+  width: 44px; height: 63px;
+  margin-left: -14px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#mano-cartas .carta:first-child { margin-left: 0; }
+#mano-cartas .carta .carta-val { font-size: 0.78rem; }
+#mano-cartas .carta .carta-palo { font-size: 1rem; }
+#mano-cartas .carta.comodin .carta-palo { font-size: 3rem; }
+
+/* Zoom de la mano: al pasar el mouse o al activar el modo jugar (botón Zoom) */
+#mano-cartas:hover,
+#zona-jugador.zoom #mano-cartas { transform: scale(1.5); }
+.btn-zoom.activo { background: rgba(46,204,113,0.2); color: #2ecc71; border-color: rgba(46,204,113,0.5); }
+/* Hueco que queda donde estaba la carta mientras la arrastras */
+#mano-cartas .carta.placeholder {
+  opacity: 0.25;
+  filter: grayscale(0.6);
+  outline: 2px dashed var(--gold);
+  background: rgba(201,168,76,0.08) !important;
+  box-shadow: none !important;
+}
+#mano-cartas .carta.placeholder .carta-inner { visibility: hidden; }
+/* Mientras se arrastra, desactivar el "salto" de hover de las demás cartas */
+#mano-cartas.arrastrando .carta { transition: none; }
+#mano-cartas.arrastrando .carta:hover { transform: none; box-shadow: none; }
+/* La carta fantasma que sigue al cursor/dedo */
+.carta-ghost {
+  position: fixed; margin: 0; z-index: 1000; pointer-events: none;
+  transform: rotate(-4deg) scale(1.08);
+  box-shadow: 0 18px 42px rgba(0,0,0,0.7);
+  border-color: var(--gold);
+  will-change: left, top;
+}
+.mano-hint {
+  text-align: center; font-size: 0.68rem;
+  color: rgba(245,240,232,0.35); letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+/* ── Carta ── */
+.carta {
+  width: var(--card-w); height: var(--card-h);
+  background: white; border-radius: var(--radius);
+  border: 1px solid rgba(0,0,0,0.12);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer; user-select: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative; flex-shrink: 0;
+  font-family: 'Playfair Display', serif;
+}
+.carta:hover { transform: translateY(-6px); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.carta.seleccionada {
+  transform: translateY(-12px);
+  box-shadow: 0 10px 28px rgba(201,168,76,0.6);
+  border-color: var(--gold);
+  outline: 2px solid var(--gold);
+}
+.carta-inner { display: flex; flex-direction: column; align-items: center; }
+.carta-val { font-size: 1rem; font-weight: 700; line-height: 1; }
+.carta-palo { font-size: 1.3rem; line-height: 1; }
+.carta.roja .carta-val, .carta.roja .carta-palo { color: var(--red); }
+.carta.negra .carta-val, .carta.negra .carta-palo { color: #111; }
+.carta.comodin { background: linear-gradient(135deg, #2c3e50, #1a252f); }
+.carta.comodin .carta-palo { font-size: 3.4rem; line-height: 1; }
+.carta.comodin .carta-val { display: none; }
+.carta.comodin .carta-inner { width: 100%; height: 100%; justify-content: center; }
+
+/* ── Acciones ── */
+#zona-acciones {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: center;
+}
+/* Panel de puntaje (esquina inferior derecha, bien abajo para no chocar con los combos) */
+.panel-puntaje {
+  position: absolute; right: 18px; bottom: 14px; z-index: 35;
+  background: #0d1f16;
+  border: 1px solid rgba(201,168,76,0.45);
+  border-radius: 14px; padding: 10px 16px;
+  min-width: 184px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+.panel-puntaje .etapa-display {
+  text-align: right; color: var(--gold2);
+  font-size: 0.74rem; margin: 0 0 8px;
+  border-bottom: 1px solid rgba(201,168,76,0.18); padding-bottom: 7px;
+}
+#puntos-tabla { display: flex; flex-direction: column; gap: 7px; }
+.punto-row {
+  display: grid; grid-template-columns: 1fr 22px auto;
+  align-items: center; gap: 12px; font-size: 0.92rem;
+}
+.punto-nombre { color: rgba(245,240,232,0.6); }
+.punto-yo .punto-nombre { color: var(--cream); font-weight: 500; }
+.punto-icono { font-size: 1rem; text-align: center; filter: grayscale(1); opacity: 0.5; }
+.punto-icono.lider { filter: none; opacity: 1; }
+.punto-val { color: var(--gold2); font-weight: 700; text-align: right; min-width: 14px; }
+
+/* ── Modal de bajada ── */
+#modal-bajada {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: none; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+#modal-bajada.visible { display: flex; }
+.modal-box {
+  background: var(--felt2);
+  border: 1px solid rgba(201,168,76,0.4);
+  border-radius: 16px; padding: 24px;
+  width: 100%; max-width: 700px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-box h3 {
+  font-family: 'Playfair Display', serif;
+  color: var(--gold); font-size: 1.3rem; margin-bottom: 6px;
+}
+.modal-desc { font-size: 0.78rem; color: rgba(245,240,232,0.5); margin-bottom: 20px; }
+.combos-editor { display: flex; flex-direction: column; gap: 16px; }
+.combo-editor {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; padding: 14px;
+}
+.combo-editor-titulo { font-size: 0.75rem; color: var(--gold2); margin-bottom: 10px; }
+.combo-editor-cartas {
+  display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px;
+  margin-bottom: 8px;
+}
+.combo-editor-acciones { display: flex; gap: 6px; flex-wrap: wrap; }
+.modal-acciones { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.85); border: 1px solid rgba(201,168,76,0.4);
+  border-radius: 10px; padding: 10px 20px; font-size: 0.85rem;
+  color: var(--cream); z-index: 200;
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; white-space: nowrap;
+}
+#toast.visible { opacity: 1; }
+
+/* ── Overlay fin ── */
+#overlay-fin {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center;
+  z-index: 300; flex-direction: column; gap: 16px;
+  text-align: center;
+}
+#overlay-fin.visible { display: flex; }
+#overlay-fin h2 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 2rem; }
+#overlay-fin p { color: rgba(245,240,232,0.7); font-size: 0.9rem; }
+.tabla-puntos {
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.3);
+  border-radius: 12px; padding: 16px 24px;
+  min-width: 220px;
+}
+.tabla-puntos-row {
+  display: flex; justify-content: space-between; gap: 24px;
+  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.85rem;
+}
+.tabla-puntos-row:last-child { border-bottom: none; }
+
+/* Scroll */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 3px; }
+
+/* responsive */
+@media (max-width: 760px) {
+  #tablero {
+    margin: 8px; border-radius: 32px; padding: 12px 14px;
+  }
+  .fila-melds { gap: 14px; }
+  .meld-group-combos { gap: 8px; }
+  .seat { padding: 6px 8px; }
+  #zona-mazo-descarte { gap: 14px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 2rem; }
+  :root { --card-w: 46px; --card-h: 66px; }
+  .carta-val { font-size: 0.85rem; }
+  .carta-palo { font-size: 1.1rem; }
+  .seat-avatar { width: 28px; height: 28px; font-size: 1rem; }
+  .seat-nombre { font-size: 0.72rem; }
+  .seat-stats { font-size: 0.6rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── LOBBY ── -->
+<div id="screen-lobby">
+  <div style="text-align:center">
+    <h1>🃏 Carioca</h1>
+    <p class="subtitle">JUEGO DE CARTAS ONLINE</p>
+  </div>
+
+  <div class="lobby-box" id="box-inicio">
+    <h2>Entrar al juego</h2>
+    <input id="input-nombre" placeholder="Tu nombre" maxlength="20">
+    <button class="btn" onclick="mostrarOpciones()">Continuar →</button>
+  </div>
+
+  <div class="lobby-box" id="box-opciones" style="display:none">
+    <button class="btn" onclick="crearSala()">Crear sala nueva</button>
+    <div class="divider">── o ──</div>
+    <input id="input-codigo" placeholder="Código de sala" maxlength="4" style="text-transform:uppercase; letter-spacing:0.2em; text-align:center;">
+    <button class="btn btn-outline" onclick="unirSala()">Unirse a sala →</button>
+  </div>
+
+  <div class="lobby-box" id="box-sala" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2>Sala: <span id="display-codigo" style="color:var(--gold);letter-spacing:0.2em"></span></h2>
+      <button class="btn btn-sm btn-outline" onclick="copiarCodigo()">Copiar</button>
+    </div>
+    <p style="font-size:0.75rem;color:rgba(245,240,232,0.4)">Comparte el código con tus amigos</p>
+    <div id="lista-jugadores"></div>
+    <button class="btn" id="btn-iniciar" onclick="iniciarJuego()" style="display:none">▶ Iniciar partida</button>
+    <p id="espera-msg" style="font-size:0.78rem;color:rgba(245,240,232,0.4);text-align:center">Esperando al anfitrión...</p>
+  </div>
+
+  <div id="msg-error"></div>
+</div>
+
+<!-- ── JUEGO ── -->
+<div id="screen-game">
+  <div id="game-header">
+    <h1>🃏 Carioca</h1>
+    <div class="header-info">
+      <div class="ronda-badge">Ronda <span id="hdr-ronda">1</span></div>
+      <span id="hdr-turno-texto">—</span>
+    </div>
+  </div>
+
+  <div id="mesa">
+    <!-- Tablero tipo mesa: oponentes arriba · mazo al centro · mis combos abajo (grid) -->
+    <div id="tablero">
+      <!-- Oponentes alrededor de la mesa: arriba / izquierda / derecha -->
+      <div class="celda celda-top" id="celda-top"></div>
+      <div class="celda celda-left" id="celda-left"></div>
+      <div class="celda celda-right" id="celda-right"></div>
+
+      <!-- Mazo y descarte al centro -->
+      <div class="celda-center">
+        <div id="zona-mazo-descarte">
+          <div class="pila">
+            <div class="pila-label">MAZO</div>
+            <button id="btn-mazo" onclick="robarMazo()" title="Robar del mazo"></button>
+            <div class="mazo-count" id="mazo-count">0 cartas</div>
+          </div>
+          <div class="pila">
+            <div class="pila-label">DESCARTE</div>
+            <button id="btn-descarte" onclick="robarDescarte()">
+              <div class="carta-inner">
+                <span class="descarte-val" id="desc-val">—</span>
+                <span class="descarte-palo" id="desc-palo"></span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mis combinaciones bajadas, frente a mí (abajo) -->
+      <div class="celda celda-mine" id="celda-mine"></div>
+    </div>
+
+    <!-- Jugador (tú) -->
+    <div id="zona-jugador">
+      <div class="jugador-header">
+        <div class="jugador-nombre-display">
+          <span id="mi-nombre-display">Tú</span>
+          <span class="turno-indicator" id="mi-turno-badge">—</span>
+        </div>
+        <div class="panel-puntaje">
+          <div class="etapa-display">Etapa <span class="etapa-num" id="mi-etapa-num">1</span>/12 · <span id="mi-etapa-desc">—</span></div>
+          <div id="puntos-tabla"></div>
+        </div>
+      </div>
+      <div class="mano-hint">✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar · clic para seleccionar</div>
+      <div id="mano-cartas"></div>
+      <div id="zona-acciones">
+        <button class="btn btn-sm" onclick="abrirModalBajada()">⬇ Bajar etapa</button>
+        <button class="btn btn-sm btn-red" onclick="tirarSeleccionada()">🗑 Tirar carta</button>
+        <button class="btn btn-sm btn-outline" onclick="pegarSeleccionada()">+ Pegar a combo</button>
+        <button class="btn btn-sm btn-outline btn-zoom" id="btn-zoom" onclick="toggleZoomMano()">🔍 Zoom</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL BAJADA ── -->
+<div id="modal-bajada">
+  <div class="modal-box">
+    <h3>Bajar etapa</h3>
+    <div class="modal-desc" id="modal-etapa-desc">—</div>
+    <div class="combos-editor" id="combos-editor"></div>
+    <div class="modal-acciones">
+      <button class="btn" onclick="confirmarBajada()">✓ Confirmar bajada</button>
+      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── OVERLAY FIN ── -->
+<div id="overlay-fin">
+  <h2 id="fin-titulo">—</h2>
+  <p id="fin-subtitulo">—</p>
+  <div class="tabla-puntos" id="fin-tabla"></div>
+  <button class="btn" onclick="location.reload()">Nueva partida</button>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<script>
+// ── DEMO: socket simulado (sin servidor) ─────────────────────────────────────
+const socket = {
+  on() {},
+  emit(evento, datos) { demoManejarAccion(evento, datos); },
+};
+
+// Estado local
+let miId = null;
+let miNombre = '';
+let salaActual = '';
+let soyAnfitrion = false;
+let estado = null;
+let cartasSeleccionadas = [];
+let combosModal = []; // [{cartas:[]}]
+let modoAccion = null; // 'pegar'
+let ordenMano = []; // orden visual local de la mano (ids), persistente entre renders
+
+// ── Lobby ────────────────────────────────────────────────────────────────────
+function mostrarOpciones() {
+  miNombre = document.getElementById('input-nombre').value.trim();
+  if (!miNombre) return toast('Escribe tu nombre');
+  document.getElementById('box-inicio').style.display = 'none';
+  document.getElementById('box-opciones').style.display = '';
+}
+
+function crearSala() {
+  socket.emit('crearSala', { nombre: miNombre });
+}
+
+function unirSala() {
+  const codigo = document.getElementById('input-codigo').value.trim().toUpperCase();
+  if (!codigo) return toast('Escribe un código de sala');
+  socket.emit('unirSala', { codigo, nombre: miNombre });
+}
+
+function iniciarJuego() {
+  socket.emit('iniciarJuego');
+}
+
+function copiarCodigo() {
+  navigator.clipboard.writeText(salaActual).then(() => toast('Código copiado: ' + salaActual));
+}
+
+socket.on('salaCreada', ({ codigo, jugadores }) => {
+  miId = socket.id;
+  salaActual = codigo;
+  soyAnfitrion = true;
+  mostrarSala(codigo, jugadores);
+});
+
+socket.on('salaUnida', ({ codigo, jugadores }) => {
+  miId = socket.id;
+  salaActual = codigo;
+  mostrarSala(codigo, jugadores);
+});
+
+socket.on('jugadorUnido', ({ jugadores }) => {
+  renderJugadoresLobby(jugadores);
+});
+
+function mostrarSala(codigo, jugadores) {
+  document.getElementById('box-inicio').style.display = 'none';
+  document.getElementById('box-opciones').style.display = 'none';
+  document.getElementById('box-sala').style.display = '';
+  document.getElementById('display-codigo').textContent = codigo;
+  renderJugadoresLobby(jugadores);
+  if (soyAnfitrion) {
+    document.getElementById('btn-iniciar').style.display = '';
+    document.getElementById('espera-msg').style.display = 'none';
+  }
+}
+
+function renderJugadoresLobby(jugadores) {
+  const el = document.getElementById('lista-jugadores');
+  el.innerHTML = jugadores.map(j =>
+    `<div class="jugador-item"><span class="dot"></span>${j.nombre}${j.id === miId ? ' (tú)' : ''}</div>`
+  ).join('');
+}
+
+// ── Juego ─────────────────────────────────────────────────────────────────────
+socket.on('juegoIniciado', () => {
+  document.getElementById('screen-lobby').style.display = 'none';
+  document.getElementById('screen-game').style.display = 'flex';
+  document.getElementById('screen-game').style.flexDirection = 'column';
+});
+
+socket.on('estado', (e) => {
+  estado = e;
+  cartasSeleccionadas = [];
+  renderEstado();
+});
+
+socket.on('finRonda', ({ ganador, nombreGanador, puntos, ronda }) => {
+  toast(`🏆 Ronda ${ronda} terminada. Ganó ${nombreGanador}!`);
+});
+
+socket.on('finJuego', ({ ganador, nombre, puntos }) => {
+  document.getElementById('fin-titulo').textContent = `🏆 ${nombre} gana el juego!`;
+  document.getElementById('fin-subtitulo').textContent = 'Puntuación final (menos es mejor)';
+  const rows = Object.entries(puntos)
+    .map(([id, pts]) => ({ nombre: estado?.nombres[id] || id, pts }))
+    .sort((a, b) => a.pts - b.pts);
+  document.getElementById('fin-tabla').innerHTML =
+    rows.map(r => `<div class="tabla-puntos-row"><span>${r.nombre}</span><span>${r.pts} pts</span></div>`).join('');
+  document.getElementById('overlay-fin').classList.add('visible');
+});
+
+socket.on('error', (msg) => toast('⚠ ' + msg));
+
+socket.on('jugadorDesconectado', ({ nombre }) => toast(`${nombre} se desconectó`));
+
+// ── Helpers de mesa ─────────────────────────────────────────────────────────
+const AVATARES = ['🦊','🐼','🐧','🐸','🦉','🐙','🐳','🦁','🐯','🐵','🐨','🦄'];
+function avatarDe(id) {
+  let h = 0;
+  for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return AVATARES[h % AVATARES.length];
+}
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderEstado() {
+  if (!estado) return;
+  const e = estado;
+
+  // Header
+  document.getElementById('hdr-ronda').textContent = e.ronda;
+  const turnNombre = e.nombres[e.turno] || '—';
+  document.getElementById('hdr-turno-texto').textContent =
+    e.soyYo ? '✦ Tu turno' : `Turno de ${turnNombre}`;
+
+  // Mi info
+  const miEtapaIdx = e.etapas[miId] || 0;
+  const ETAPAS_DESC = [
+    '2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos',
+    '2 tríos + 1 escalera','1 trío + 2 escaleras','3 escaleras','4 tríos',
+    '3 tríos + 1 escalera','2 tríos + 2 escaleras','1 trío + 3 escaleras','4 escaleras'
+  ];
+  document.getElementById('mi-nombre-display').textContent = miNombre || 'Tú';
+  document.getElementById('mi-etapa-num').textContent = miEtapaIdx + 1;
+  document.getElementById('mi-etapa-desc').textContent = ETAPAS_DESC[miEtapaIdx] || '—';
+
+  const badge = document.getElementById('mi-turno-badge');
+  if (e.soyYo) {
+    badge.textContent = e.fase === 'robar' ? 'Roba una carta' : 'Juega o tira';
+    badge.className = 'turno-indicator turno-yo';
+  } else {
+    badge.textContent = 'Esperando...';
+    badge.className = 'turno-indicator turno-otro';
+  }
+
+  // Puntos (panel: líder con corona, el resto con escudo apagado)
+  const ptEl = document.getElementById('puntos-tabla');
+  const entriesPts = Object.entries(e.puntos);
+  const minPts = Math.min(...entriesPts.map(([, p]) => p));
+  ptEl.innerHTML = entriesPts.map(([id, pts]) => {
+    const lider = pts === minPts;
+    const yo = id === miId;
+    return `<div class="punto-row${yo ? ' punto-yo' : ''}">
+      <span class="punto-nombre">${e.nombres[id]}</span>
+      <span class="punto-icono${lider ? ' lider' : ''}">${lider ? '👑' : '🛡️'}</span>
+      <span class="punto-val">${pts}</span>
+    </div>`;
+  }).join('');
+
+  // Mazo y descarte
+  document.getElementById('mazo-count').textContent = e.mazoSize + ' cartas';
+  const topDesc = e.descarte[e.descarte.length - 1];
+  if (topDesc) {
+    document.getElementById('desc-val').textContent = topDesc.val;
+    document.getElementById('desc-palo').textContent = topDesc.palo;
+    const btnD = document.getElementById('btn-descarte');
+    const esRoja = ['♥','♦'].includes(topDesc.palo);
+    btnD.querySelector('.descarte-val').style.color = topDesc.val === '🃏' ? '#c9a84c' : (esRoja ? '#c0392b' : '#111');
+  }
+
+  // ── Jugadores alrededor de la mesa: arriba / izquierda / derecha · yo abajo ──
+  const celdaTop = document.getElementById('celda-top');
+  const celdaLeft = document.getElementById('celda-left');
+  const celdaRight = document.getElementById('celda-right');
+  const celdaMine = document.getElementById('celda-mine');
+  celdaTop.innerHTML = ''; celdaLeft.innerHTML = ''; celdaRight.innerHTML = ''; celdaMine.innerHTML = '';
+
+  const PARTES = [
+    ['trio','trio'],['trio','escalera'],['escalera','escalera'],
+    ['trio','trio','trio'],['trio','trio','escalera'],['trio','escalera','escalera'],
+    ['escalera','escalera','escalera'],['trio','trio','trio','trio'],
+    ['trio','trio','trio','escalera'],['trio','trio','escalera','escalera'],
+    ['trio','escalera','escalera','escalera'],['escalera','escalera','escalera','escalera']
+  ];
+  function construirCombos(id) {
+    const combos = e.bajadasEtapa[id];
+    if (!combos) return null;
+    const tipos = PARTES[e.etapas[id]] || [];
+    const grupo = document.createElement('div');
+    grupo.className = 'meld-group';
+    const wrap = document.createElement('div');
+    wrap.className = 'meld-group-combos';
+    combos.forEach((combo, ci) => {
+      const tipo = tipos[ci] || '';
+      const area = document.createElement('div');
+      area.className = 'combo-area';
+      area.innerHTML = `<div class="combo-tipo">${tipo === 'trio' ? 'TRÍO' : 'ESCALERA'}</div>` +
+        combo.map(c => cartaHTML(c, false)).join('');
+      area.onclick = () => pegarEnCombo(id, ci);
+      wrap.appendChild(area);
+    });
+    grupo.appendChild(wrap);
+    return grupo;
+  }
+
+  const oponentes = e.jugadores.filter(id => id !== miId);
+  if (oponentes.length === 0) {
+    celdaTop.innerHTML = '<span class="sin-oponentes">Esperando oponentes...</span>';
+  } else {
+    // 1 → arriba; 2 → izq/der; 3 → izq/arriba/der
+    const areas = oponentes.length <= 1 ? ['top']
+                : oponentes.length === 2 ? ['left', 'right']
+                : ['left', 'top', 'right'];
+    const celdaDe = { top: celdaTop, left: celdaLeft, right: celdaRight };
+    oponentes.forEach((id, i) => {
+      const cell = celdaDe[areas[i]] || celdaTop;
+      const nombre = e.nombres[id] || id;
+      const cantCartas = e.manosAjenas[id] || 0;
+      const etapaOp = e.etapas[id] || 0;
+      const bajado = e.bajadasEtapa[id] ? '· ✓ bajó' : '';
+      const dorsos = Array(cantCartas).fill('<span class="carta-dorso"></span>').join('');
+      const activo = e.turno === id ? ' seat-activo' : '';
+      const seat = document.createElement('div');
+      seat.className = 'seat' + activo;
+      seat.innerHTML = `
+        <div class="seat-head">
+          <div class="seat-avatar">${avatarDe(id)}</div>
+          <div class="seat-meta">
+            <div class="seat-nombre">${nombre}${e.turno === id ? ' 🎯' : ''}</div>
+            <div class="seat-stats">Etapa ${etapaOp+1} · ${cantCartas} cartas ${bajado}</div>
+          </div>
+        </div>
+        <div class="seat-cartas">${dorsos}</div>`;
+      cell.appendChild(seat);
+      const melds = construirCombos(id);
+      if (melds) cell.appendChild(melds);
+    });
+  }
+  // Mis combos, abajo (frente a mí)
+  const misMelds = construirCombos(miId);
+  if (misMelds) celdaMine.appendChild(misMelds);
+
+  // Mi mano (en el orden visual elegido por el jugador)
+  renderMano(manoOrdenada());
+
+  // Habilitar/deshabilitar botones según turno y fase
+  const puedoRobar = e.soyYo && e.fase === 'robar';
+  const puedoJugar = e.soyYo && e.fase === 'jugar';
+  document.getElementById('btn-mazo').disabled = !puedoRobar;
+  document.getElementById('btn-descarte').disabled = !puedoRobar;
+  document.getElementById('btn-mazo').style.opacity = puedoRobar ? '1' : '0.5';
+  document.getElementById('btn-descarte').style.opacity = puedoRobar ? '1' : '0.5';
+}
+
+// Devuelve la mano del estado pero ordenada según el orden visual local.
+// Las cartas nuevas (recién robadas) se agregan al final; las que ya no están se eliminan.
+function manoOrdenada() {
+  const mano = estado?.miMano || [];
+  const byId = new Map(mano.map(c => [c.id, c]));
+  const ordered = ordenMano.filter(id => byId.has(id)).map(id => byId.get(id));
+  const conocidas = new Set(ordered.map(c => c.id));
+  for (const c of mano) if (!conocidas.has(c.id)) ordered.push(c);
+  ordenMano = ordered.map(c => c.id);
+  return ordered;
+}
+
+function renderMano(mano) {
+  const el = document.getElementById('mano-cartas');
+  el.innerHTML = '';
+  mano.forEach(carta => {
+    const div = document.createElement('div');
+    div.innerHTML = cartaHTML(carta, true);
+    const card = div.firstChild;
+    attachCartaInteraccion(card, carta.id);
+    el.appendChild(card);
+  });
+  ajustarAbanico();
+}
+
+// Calcula el solapamiento para que todas las cartas quepan en UNA fila (sin scroll)
+function ajustarAbanico() {
+  const cont = document.getElementById('mano-cartas');
+  const cards = [...cont.querySelectorAll('.carta')];
+  const n = cards.length;
+  if (!n) return;
+  const cardW = cards[0].offsetWidth || 44;
+  const avail = (cont.parentElement?.clientWidth || cont.clientWidth || 600) - 8;
+  let margin = 0; // separación entre cartas (negativa = solapadas)
+  if (n > 1) margin = (avail - n * cardW) / (n - 1);
+  margin = Math.min(2, margin);                 // como máximo 2px de aire
+  margin = Math.max(-cardW * 0.74, margin);     // como mucho ~74% de solape
+  cards.forEach((c, i) => { c.style.marginLeft = i === 0 ? '0px' : margin + 'px'; });
+}
+window.addEventListener('resize', ajustarAbanico);
+
+// ── Arrastrar para reordenar la mano (mouse + touch) ──────────────────────────
+// drag = { card, id, startX, startY, dragging, moved, ghost, offX, offY }
+let drag = null;
+
+function attachCartaInteraccion(card, id) {
+  card.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+    if (drag) return; // ya hay un arrastre en curso
+    ev.preventDefault();
+    drag = {
+      card, id,
+      startX: ev.clientX, startY: ev.clientY,
+      dragging: false, moved: false, ghost: null, offX: 0, offY: 0,
+    };
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', onDragEnd);
+    document.addEventListener('pointercancel', onDragEnd);
+  });
+}
+
+function onDragMove(ev) {
+  if (!drag) return;
+  const dx = ev.clientX - drag.startX, dy = ev.clientY - drag.startY;
+
+  if (!drag.dragging && Math.hypot(dx, dy) > 6) {
+    comenzarDrag(ev);
+  }
+  if (!drag.dragging) return;
+
+  ev.preventDefault();
+  // La carta fantasma sigue al puntero
+  drag.ghost.style.left = (ev.clientX - drag.offX) + 'px';
+  drag.ghost.style.top  = (ev.clientY - drag.offY) + 'px';
+
+  // Mover el hueco (placeholder) entre las demás cartas
+  const cont = document.getElementById('mano-cartas');
+  const ref = cartaDespuesDe(cont, ev.clientX, ev.clientY);
+  if (ref == null) cont.appendChild(drag.card);
+  else if (ref !== drag.card) cont.insertBefore(drag.card, ref);
+}
+
+function comenzarDrag(ev) {
+  drag.dragging = true;
+  drag.moved = true;
+  const card = drag.card;
+  const r = card.getBoundingClientRect();
+  drag.offX = ev.clientX - r.left;
+  drag.offY = ev.clientY - r.top;
+
+  // Clon flotante que sigue al cursor/dedo
+  const ghost = card.cloneNode(true);
+  ghost.classList.add('carta-ghost');
+  ghost.classList.remove('seleccionada');
+  ghost.style.width  = r.width + 'px';
+  ghost.style.height = r.height + 'px';
+  ghost.style.left = r.left + 'px';
+  ghost.style.top  = r.top + 'px';
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+
+  // La carta original se convierte en el hueco
+  card.classList.add('placeholder');
+  document.getElementById('mano-cartas').classList.add('arrastrando');
+}
+
+function onDragEnd() {
+  if (!drag) return;
+  document.removeEventListener('pointermove', onDragMove);
+  document.removeEventListener('pointerup', onDragEnd);
+  document.removeEventListener('pointercancel', onDragEnd);
+
+  if (drag.dragging) {
+    drag.card.classList.remove('placeholder');
+    if (drag.ghost) drag.ghost.remove();
+    const cont = document.getElementById('mano-cartas');
+    cont.classList.remove('arrastrando');
+    // Guardar el nuevo orden visual leyendo el DOM
+    ordenMano = [...cont.querySelectorAll('.carta')].map(c => c.dataset.id);
+    ajustarAbanico(); // recolocar el solapamiento tras reordenar
+  } else if (!drag.moved) {
+    seleccionarCarta(drag.id); // fue un clic, no un arrastre
+  }
+  drag = null;
+}
+
+// Encuentra la carta ante la cual insertar el hueco, según la posición del puntero.
+function cartaDespuesDe(cont, x, y) {
+  const cartas = [...cont.querySelectorAll('.carta')].filter(c => c !== drag.card);
+  // Preferir cartas en la misma fila (la mano puede ocupar varias filas)
+  let candidatas = cartas.filter(c => {
+    const b = c.getBoundingClientRect();
+    return y >= b.top - 12 && y <= b.bottom + 12;
+  });
+  if (candidatas.length === 0) candidatas = cartas;
+  let mejor = null, mejorOffset = -Infinity;
+  for (const c of candidatas) {
+    const b = c.getBoundingClientRect();
+    const offset = x - (b.left + b.width / 2);
+    if (offset < 0 && offset > mejorOffset) { mejorOffset = offset; mejor = c; }
+  }
+  return mejor; // null → insertar al final de la fila
+}
+
+function cartaHTML(carta, clickable) {
+  const esRoja = ['♥','♦'].includes(carta.palo);
+  const esComodin = carta.val === '🃏';
+  const cls = esComodin ? 'comodin' : (esRoja ? 'roja' : 'negra');
+  const selCls = cartasSeleccionadas.includes(carta.id) ? ' seleccionada' : '';
+  return `<div class="carta ${cls}${selCls}" data-id="${carta.id}">
+    <div class="carta-inner">
+      <span class="carta-val">${esComodin ? '' : carta.val}</span>
+      <span class="carta-palo">${esComodin ? '🃏' : carta.palo}</span>
+    </div>
+  </div>`;
+}
+
+// ── Acciones ──────────────────────────────────────────────────────────────────
+function seleccionarCarta(id) {
+  // Selección única: si tocas otra, la anterior se deselecciona; si tocas la misma, se quita
+  cartasSeleccionadas = cartasSeleccionadas.includes(id) ? [] : [id];
+  // Solo actualizar la clase (sin reconstruir la mano) → evita el efecto acordeón/zoom
+  document.querySelectorAll('#mano-cartas .carta').forEach(c => {
+    c.classList.toggle('seleccionada', cartasSeleccionadas.includes(c.dataset.id));
+  });
+}
+
+function robarMazo() {
+  if (!estado?.soyYo || estado?.fase !== 'robar') return;
+  socket.emit('robarMazo');
+}
+
+function robarDescarte() {
+  if (!estado?.soyYo || estado?.fase !== 'robar') return;
+  socket.emit('robarDescarte');
+}
+
+function tirarSeleccionada() {
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno o debes robar primero');
+  if (cartasSeleccionadas.length !== 1) return toast('Selecciona exactamente 1 carta para tirar');
+  socket.emit('tirarCarta', { cartaId: cartasSeleccionadas[0] });
+  cartasSeleccionadas = [];
+}
+
+function pegarSeleccionada() {
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno');
+  if (cartasSeleccionadas.length !== 1) return toast('Selecciona 1 carta para pegar');
+  toast('Ahora haz clic en la combinación donde quieres pegar la carta');
+  modoAccion = 'pegar';
+}
+
+function pegarEnCombo(jugadorId, comboIdx) {
+  if (modoAccion !== 'pegar') return;
+  if (cartasSeleccionadas.length !== 1) return toast('Selecciona 1 carta primero');
+  socket.emit('pegarCarta', {
+    cartaId: cartasSeleccionadas[0],
+    jugadorId, comboIdx,
+    posicion: estado.bajadasEtapa[jugadorId][comboIdx].length,
+  });
+  cartasSeleccionadas = [];
+  modoAccion = null;
+}
+
+// ── Modal Bajada ──────────────────────────────────────────────────────────────
+const ETAPAS_PARTES = [
+  ['trio','trio'],['trio','escalera'],['escalera','escalera'],
+  ['trio','trio','trio'],['trio','trio','escalera'],['trio','escalera','escalera'],
+  ['escalera','escalera','escalera'],['trio','trio','trio','trio'],
+  ['trio','trio','trio','escalera'],['trio','trio','escalera','escalera'],
+  ['trio','escalera','escalera','escalera'],['escalera','escalera','escalera','escalera']
+];
+const ETAPAS_DESC_ARR = [
+  '2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos',
+  '2 tríos + 1 escalera','1 trío + 2 escaleras','3 escaleras','4 tríos',
+  '3 tríos + 1 escalera','2 tríos + 2 escaleras','1 trío + 3 escaleras','4 escaleras'
+];
+
+function abrirModalBajada() {
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno o debes robar primero');
+  if (estado.bajadasEtapa[miId]) return toast('Ya bajaste tu etapa en esta ronda');
+  const etapaIdx = estado.etapas[miId] || 0;
+  const partes = ETAPAS_PARTES[etapaIdx];
+  document.getElementById('modal-etapa-desc').textContent = ETAPAS_DESC_ARR[etapaIdx];
+  combosModal = partes.map(tipo => ({ tipo, cartas: [] }));
+  renderModalCombos();
+  document.getElementById('modal-bajada').classList.add('visible');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-bajada').classList.remove('visible');
+  combosModal = [];
+  // Devolver cartas al modal (ya están en mano, no pasa nada)
+}
+
+function renderModalCombos() {
+  const ed = document.getElementById('combos-editor');
+  ed.innerHTML = '';
+  combosModal.forEach((combo, ci) => {
+    const div = document.createElement('div');
+    div.className = 'combo-editor';
+    const tipoLabel = combo.tipo === 'trio' ? 'Trío (mín. 3 del mismo valor)' : 'Escalera (mín. 4 seguidas del mismo palo)';
+    div.innerHTML = `<div class="combo-editor-titulo">${ci+1}. ${tipoLabel}</div>
+      <div class="combo-editor-cartas" id="modal-combo-${ci}"></div>
+      <div class="combo-editor-acciones">
+        <span style="font-size:0.7rem;color:rgba(245,240,232,0.4)">Cartas de tu mano:</span>
+      </div>`;
+    ed.appendChild(div);
+
+    // Render cartas en el combo
+    const cartasEl = div.querySelector(`#modal-combo-${ci}`);
+    combo.cartas.forEach((carta, ki) => {
+      const d = document.createElement('div');
+      d.innerHTML = cartaHTML(carta, false);
+      const c = d.firstChild;
+      c.style.cursor = 'pointer';
+      c.title = 'Clic para quitar';
+      c.onclick = () => quitarDeCombo(ci, ki);
+      cartasEl.appendChild(c);
+    });
+
+    // Botones: cartas de mi mano no usadas
+    const usadas = combosModal.flatMap(c => c.cartas.map(x => x.id));
+    const disponibles = (estado?.miMano || []).filter(c => !usadas.includes(c.id));
+    const accs = div.querySelector('.combo-editor-acciones');
+    const cartasDisp = document.createElement('div');
+    cartasDisp.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;';
+    disponibles.forEach(carta => {
+      const d = document.createElement('div');
+      d.innerHTML = cartaHTML(carta, false);
+      const c = d.firstChild;
+      c.style.cssText = 'cursor:pointer;transform:scale(0.85);transition:transform 0.1s;';
+      c.onmouseenter = () => c.style.transform = 'scale(0.95) translateY(-3px)';
+      c.onmouseleave = () => c.style.transform = 'scale(0.85)';
+      c.onclick = () => agregarACombo(ci, carta);
+      cartasDisp.appendChild(c);
+    });
+    accs.appendChild(cartasDisp);
+  });
+}
+
+function agregarACombo(comboIdx, carta) {
+  combosModal[comboIdx].cartas.push(carta);
+  renderModalCombos();
+}
+
+function quitarDeCombo(comboIdx, cartaIdx) {
+  combosModal[comboIdx].cartas.splice(cartaIdx, 1);
+  renderModalCombos();
+}
+
+function confirmarBajada() {
+  const combinaciones = combosModal.map(c => c.cartas);
+  socket.emit('bajarEtapa', { combinaciones });
+  cerrarModal();
+}
+
+// ── Zoom de la mano ───────────────────────────────────────────────────────────
+function toggleZoomMano() {
+  const z = document.getElementById('zona-jugador');
+  const activo = z.classList.toggle('zoom');
+  document.getElementById('btn-zoom').classList.toggle('activo', activo);
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('visible'), 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEMO: estado de prueba con tríos ya bajados (se ve al instante, sin servidor)
+// ═══════════════════════════════════════════════════════════════════════════════
+let _uid = 0;
+function C(val, palo) { return { id: 'c' + (++_uid), val, palo }; }
+
+function nuevoEstadoDemo() {
+  return {
+    ronda: 1,
+    turno: 'yo',
+    soyYo: true,
+    fase: 'jugar',
+    jugadores: ['daniel', 'luna', 'pudding', 'yo'],
+    nombres: { yo: 'Tú (demo)', daniel: 'daniel', luna: 'luna', pudding: 'pudding' },
+    etapas: { yo: 0, daniel: 0, luna: 0, pudding: 2 }, // yo/daniel/luna: 2 tríos · pudding: 2 escaleras
+    puntos: { yo: 0, daniel: 5, luna: 10, pudding: 15 },
+    mazoSize: 73,
+    descarte: [ C('7', '♦') ],
+    manosAjenas: { daniel: 6, luna: 8, pudding: 4 },
+    // Todos ya bajaron sus combinaciones
+    bajadasEtapa: {
+      daniel: [
+        [ C('10', '♦'), C('10', '♥'), C('10', '♠') ],
+        [ C('K', '♣'),  C('K', '♠'),  C('K', '♣') ],
+      ],
+      luna: [
+        [ C('9', '♦'), C('9', '♥'), C('9', '♠') ],
+        [ C('J', '♣'), C('J', '♠'), C('J', '♥') ],
+      ],
+      pudding: [
+        [ C('4', '♠'), C('5', '♠'), C('6', '♠'), C('7', '♠') ],
+        [ C('9', '♥'), C('10', '♥'), C('J', '♥'), C('Q', '♥') ],
+      ],
+      yo: [
+        [ C('Q', '♠'), C('Q', '♥'), C('Q', '♦') ],
+        [ C('A', '♠'), C('A', '♥'), C('A', '♦') ],
+      ],
+    },
+    // Mi mano de prueba
+    miMano: [
+      C('8', '♠'), C('4', '♠'), C('J', '♦'), C('7', '♥'),
+      C('K', '♥'), C('4', '♣'), C('J', '♠'), C('9', '♦'),
+      C('2', '♣'), C('🃏', '🃏'),
+    ],
+  };
+}
+
+// Simula localmente las acciones para que la demo sea jugable
+function demoManejarAccion(evento, datos) {
+  if (!estado) return;
+  const top = () => estado.descarte[estado.descarte.length - 1];
+  switch (evento) {
+    case 'robarMazo': {
+      const palos = ['♠', '♥', '♦', '♣'];
+      const vals = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+      estado.miMano.push(C(vals[(_uid) % vals.length], palos[_uid % 4]));
+      estado.mazoSize--; estado.fase = 'jugar';
+      toast('Robaste una carta del mazo'); renderEstado(); break;
+    }
+    case 'robarDescarte': {
+      const c = estado.descarte.pop() || C('7','♦');
+      estado.miMano.push(c); estado.fase = 'jugar';
+      toast('Tomaste la carta del descarte'); renderEstado(); break;
+    }
+    case 'tirarCarta': {
+      const i = estado.miMano.findIndex(c => c.id === datos.cartaId);
+      if (i === -1) return;
+      const [c] = estado.miMano.splice(i, 1);
+      estado.descarte.push(c);
+      ordenMano = ordenMano.filter(id => id !== c.id);
+      toast('Tiraste ' + (c.val === '🃏' ? 'el comodín' : c.val + c.palo));
+      renderEstado(); break;
+    }
+    case 'bajarEtapa':
+      toast('(demo) Bajar etapa: la lógica real corre en el servidor'); break;
+    case 'pegarCarta':
+      toast('(demo) Pegar a combo: la lógica real corre en el servidor'); break;
+    default: break;
+  }
+}
+
+// Arranque inmediato: saltar el lobby y mostrar la mesa con todo bajado
+window.addEventListener('DOMContentLoaded', () => {
+  miId = 'yo';
+  miNombre = 'Tú (demo)';
+  salaActual = 'DEMO';
+  document.getElementById('screen-lobby').style.display = 'none';
+  const game = document.getElementById('screen-game');
+  game.style.display = 'flex';
+  game.style.flexDirection = 'column';
+  estado = nuevoEstadoDemo();
+  renderEstado();
+  toast('🎴 Partida de DEMO — tríos ya bajados. ¡Prueba arrastrar y el zoom!');
+});
+</script>
+</body>
+</html>
