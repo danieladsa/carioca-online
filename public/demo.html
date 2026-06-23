@@ -248,16 +248,16 @@ input::placeholder { color: rgba(245,240,232,0.3); }
   font-size: 0.7rem; color: rgba(245,240,232,0.6);
   text-align: center; margin-top: 6px;
 }
+/* El descarte es una carta normal (misma .carta) dentro de un botón transparente */
 #btn-descarte {
-  background: white;
-  border: 2px solid rgba(0,0,0,0.15);
+  background: transparent; border: none; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem; font-weight: 700; user-select: none;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
 }
-#btn-descarte:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.6); }
-.descarte-val { font-size: 1.1rem; font-weight: 700; }
-.descarte-palo { font-size: 1.4rem; }
+#btn-descarte:hover { transform: translateY(-3px); }
+#btn-descarte .carta { width: 100%; height: 100%; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
+#btn-descarte:empty::after {
+  content: '—'; color: rgba(245,240,232,0.4); font-size: 1.2rem;
+}
 
 /* ── Bajadas en mesa (combos) ── */
 .combo-area {
@@ -578,12 +578,7 @@ input::placeholder { color: rgba(245,240,232,0.3); }
           </div>
           <div class="pila">
             <div class="pila-label">DESCARTE</div>
-            <button id="btn-descarte" onclick="robarDescarte()">
-              <div class="carta-inner">
-                <span class="descarte-val" id="desc-val">—</span>
-                <span class="descarte-palo" id="desc-palo"></span>
-              </div>
-            </button>
+            <button id="btn-descarte" onclick="robarDescarte()"></button>
           </div>
         </div>
       </div>
@@ -808,13 +803,7 @@ function renderEstado() {
   // Mazo y descarte
   document.getElementById('mazo-count').textContent = e.mazoSize + ' cartas';
   const topDesc = e.descarte[e.descarte.length - 1];
-  if (topDesc) {
-    document.getElementById('desc-val').textContent = topDesc.val;
-    document.getElementById('desc-palo').textContent = topDesc.palo;
-    const btnD = document.getElementById('btn-descarte');
-    const esRoja = ['♥','♦'].includes(topDesc.palo);
-    btnD.querySelector('.descarte-val').style.color = topDesc.val === '🃏' ? '#c9a84c' : (esRoja ? '#c0392b' : '#111');
-  }
+  document.getElementById('btn-descarte').innerHTML = topDesc ? cartaHTML(topDesc, false) : '';
 
   // ── Jugadores alrededor de la mesa: arriba / izquierda / derecha · yo abajo ──
   const celdaTop = document.getElementById('celda-top');
@@ -844,7 +833,7 @@ function renderEstado() {
       area.className = 'combo-area';
       area.innerHTML = `<div class="combo-tipo">${tipo === 'trio' ? 'TRÍO' : 'ESCALERA'}</div>` +
         combo.map(c => cartaHTML(c, false)).join('');
-      area.onclick = () => pegarEnCombo(id, ci);
+      area.onclick = (ev) => pegarEnCombo(id, ci, ev);
       wrap.appendChild(area);
     });
     grupo.appendChild(wrap);
@@ -1089,17 +1078,20 @@ function tirarSeleccionada() {
 function pegarSeleccionada() {
   if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno');
   if (cartasSeleccionadas.length !== 1) return toast('Selecciona 1 carta para pegar');
-  toast('Ahora haz clic en la combinación donde quieres pegar la carta');
+  toast('Toca el lado IZQUIERDO o DERECHO del combo para elegir dónde pegar');
   modoAccion = 'pegar';
 }
 
-function pegarEnCombo(jugadorId, comboIdx) {
+function pegarEnCombo(jugadorId, comboIdx, ev) {
   if (modoAccion !== 'pegar') return;
   if (cartasSeleccionadas.length !== 1) return toast('Selecciona 1 carta primero');
+  // El lado donde se hace clic decide el extremo: izquierda = posición 0, derecha = final
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const izquierda = (ev.clientX - rect.left) < rect.width / 2;
   socket.emit('pegarCarta', {
     cartaId: cartasSeleccionadas[0],
     jugadorId, comboIdx,
-    posicion: estado.bajadasEtapa[jugadorId][comboIdx].length,
+    posicion: izquierda ? 0 : estado.bajadasEtapa[jugadorId][comboIdx].length,
   });
   cartasSeleccionadas = [];
   modoAccion = null;
@@ -1252,14 +1244,14 @@ function nuevoEstadoDemo() {
         [ C('6', '♣'), C('7', '♣'), C('8', '♣'), C('9', '♣') ],
       ],
       yo: [
-        [ C('5', '♦'), C('6', '♦'), C('7', '♦'), C('8', '♦') ],
-        [ C('2', '♠'), C('3', '♠'), C('4', '♠'), C('5', '♠') ],
-        [ C('J', '♥'), C('Q', '♥'), C('K', '♥'), C('A', '♥') ],
+        [ C('2', '♣'), C('3', '♣'), C('4', '♣'), C('5', '♣') ], // pega la A♣ a la IZQUIERDA → A 2 3 4 5
+        [ C('9', '♠'), C('10', '♠'), C('J', '♠'), C('Q', '♠') ], // pega el comodín a izquierda (8) o derecha (K)
+        [ C('Q', '♥'), C('K', '♥'), C('A', '♥'), C('2', '♥'), C('3', '♥') ], // escalera circular (As puente)
       ],
     },
-    // Mi mano (pocas cartas, casi terminando)
+    // Mi mano: un As de trébol y un comodín para probar el "pegar a combo"
     miMano: [
-      C('K', '♣'), C('3', '♣'), C('7', '♠'), C('🃏', '🃏'),
+      C('A', '♣'), C('🃏', '🃏'),
     ],
   };
 }
@@ -1292,10 +1284,99 @@ function demoManejarAccion(evento, datos) {
     }
     case 'bajarEtapa':
       toast('(demo) Bajar etapa: la lógica real corre en el servidor'); break;
-    case 'pegarCarta':
-      toast('(demo) Pegar a combo: la lógica real corre en el servidor'); break;
+    case 'pegarCarta': {
+      const { cartaId, jugadorId, comboIdx, posicion } = datos;
+      const combos = estado.bajadasEtapa[jugadorId];
+      if (!combos) return;
+      const i = estado.miMano.findIndex(c => c.id === cartaId);
+      if (i === -1) return;
+      const tipo = ETAPAS_PARTES[estado.etapas[jugadorId]][comboIdx];
+      const carta = estado.miMano[i];
+      let nueva;
+      if (tipo === 'trio') {
+        nueva = [...combos[comboIdx], carta];
+        if (!validarTrioDemo(nueva)) { toast('⚠ No se puede pegar ahí'); return; }
+      } else {
+        const izquierda = posicion <= 0;
+        nueva = pegarEnEscaleraDemo(combos[comboIdx], carta, izquierda);
+        if (!nueva) { toast(izquierda ? '⚠ Esa carta no va a la izquierda' : '⚠ Esa carta no va a la derecha'); return; }
+      }
+      combos[comboIdx] = nueva;
+      const [c] = estado.miMano.splice(i, 1);
+      ordenMano = ordenMano.filter(id => id !== c.id);
+      const lado = tipo === 'escalera' ? (posicion <= 0 ? ' (izquierda)' : ' (derecha)') : '';
+      toast('✓ Pegaste ' + (c.val === '🃏' ? 'el comodín' : c.val + c.palo) + lado);
+      renderEstado(); break;
+    }
     default: break;
   }
+}
+
+// ── Validación/orden de escaleras (igual que el servidor) para probar el pegar ──
+const VALORES_DEMO = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+function _esComodin(c) { return c.val === '🃏'; }
+function validarTrioDemo(cartas) {
+  if (cartas.length < 3) return false;
+  const reales = cartas.filter(c => !_esComodin(c));
+  if (!reales.length) return false;
+  const v = reales[0].val;
+  return reales.every(c => c.val === v);
+}
+function validarEscaleraDemo(cartas) {
+  const N = VALORES_DEMO.length;
+  if (cartas.length < 4 || cartas.length > N) return false;
+  const reales = cartas.filter(c => !_esComodin(c));
+  if (!reales.length) return false;
+  const palo = reales[0].palo;
+  if (!reales.every(c => c.palo === palo)) return false;
+  const idx = c => VALORES_DEMO.indexOf(c.val);
+  const pos = reales.map(idx).sort((a, b) => a - b);
+  for (let i = 1; i < pos.length; i++) if (pos[i] === pos[i - 1]) return false;
+  let maxGap = -1;
+  for (let i = 0; i < pos.length; i++) {
+    const n = pos[(i + 1) % pos.length];
+    const g = (n - pos[i] - 1 + N) % N;
+    if (g > maxGap) maxGap = g;
+  }
+  return (N - maxGap) <= cartas.length;
+}
+function ordenarEscaleraDemo(cartas) {
+  const N = VALORES_DEMO.length, idx = c => VALORES_DEMO.indexOf(c.val);
+  const reales = cartas.filter(c => !_esComodin(c)), jokers = cartas.filter(_esComodin);
+  if (!reales.length) return [...cartas];
+  const byPos = [...reales].sort((a, b) => idx(a) - idx(b)), pos = byPos.map(idx);
+  let maxGap = -1, startI = 0;
+  for (let i = 0; i < pos.length; i++) {
+    const n = pos[(i + 1) % pos.length];
+    const g = (n - pos[i] - 1 + N) % N;
+    if (g > maxGap) { maxGap = g; startI = (i + 1) % pos.length; }
+  }
+  const rp = {}; byPos.forEach(c => rp[idx(c)] = c);
+  const sp = pos[startI], jk = [...jokers], out = [];
+  for (let k = 0; k < cartas.length; k++) {
+    const p = (sp + k) % N;
+    if (rp[p] !== undefined) out.push(rp[p]); else if (jk.length) out.push(jk.shift());
+  }
+  while (jk.length) out.push(jk.shift());
+  return out;
+}
+function validarCombinacionDemo(tipo, cartas) { return tipo === 'trio' ? validarTrioDemo(cartas) : validarEscaleraDemo(cartas); }
+function ordenarComboDemo(tipo, cartas) { return tipo === 'escalera' ? ordenarEscaleraDemo(cartas) : cartas; }
+// Extiende una escalera por un extremo (izquierda = extremo bajo). El comodín entra en cualquiera.
+function pegarEnEscaleraDemo(combo, carta, izquierda) {
+  const N = VALORES_DEMO.length, idx = c => VALORES_DEMO.indexOf(c.val);
+  if (combo.length + 1 > N) return null;
+  const r = combo.findIndex(c => !_esComodin(c));
+  if (r === -1) return null;
+  const low = ((idx(combo[r]) - r) % N + N) % N;
+  const high = (low + combo.length - 1) % N;
+  const requerido = izquierda ? ((low - 1 + N) % N) : ((high + 1) % N);
+  const palo = combo[r].palo;
+  if (!_esComodin(carta)) {
+    if (carta.palo !== palo) return null;
+    if (idx(carta) !== requerido) return null;
+  }
+  return izquierda ? [carta, ...combo] : [...combo, carta];
 }
 
 // Arranque inmediato: saltar el lobby y mostrar la mesa con todo bajado

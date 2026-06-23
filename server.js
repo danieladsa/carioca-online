@@ -74,35 +74,89 @@ function validarTrio(cartas) {
   return reales.every(c => c.val === valRef);
 }
 
+// Escalera CIRCULAR: la secuencia es cíclica (…J Q K A 2 3…), el As hace de puente
 function validarEscalera(cartas) {
-  if (cartas.length < 4) return false;
+  const N = VALORES.length; // 13
+  if (cartas.length < 4 || cartas.length > N) return false;
   const reales = cartas.filter(c => !esComodin(c));
-  const comodines = cartas.filter(c => esComodin(c));
   if (reales.length === 0) return false;
   // Todas del mismo palo
   const paloRef = reales[0].palo;
   if (!reales.every(c => c.palo === paloRef)) return false;
-  // Ordenar por índice
   const idx = c => VALORES.indexOf(c.val);
-  const sorted = [...reales].sort((a, b) => idx(a) - idx(b));
-  // Construir secuencia esperada
-  const comodinesDisp = [...Array(comodines.length)];
-  let pos = idx(sorted[0]);
-  for (let i = 0; i < sorted.length; i++) {
-    if (idx(sorted[i]) === pos) { pos++; continue; }
-    // Hay un hueco, usar comodín
-    while (pos < idx(sorted[i])) {
-      if (comodinesDisp.length === 0) return false;
-      comodinesDisp.pop();
-      pos++;
-    }
-    pos++;
+  const pos = reales.map(idx).sort((a, b) => a - b);
+  // Sin valores repetidos (una escalera no repite valor)
+  for (let i = 1; i < pos.length; i++) if (pos[i] === pos[i - 1]) return false;
+  // Mayor hueco cíclico (cuenta el salto K→A)
+  let maxGap = -1;
+  for (let i = 0; i < pos.length; i++) {
+    const next = pos[(i + 1) % pos.length];
+    const gap = (next - pos[i] - 1 + N) % N;
+    if (gap > maxGap) maxGap = gap;
   }
-  return true;
+  const span = N - maxGap; // ventana mínima (cíclica) que cubre todos los reales
+  // Los comodines rellenan huecos internos y/o extienden los extremos
+  return span <= cartas.length;
 }
 
 function validarCombinacion(tipo, cartas) {
   return tipo === 'trio' ? validarTrio(cartas) : validarEscalera(cartas);
+}
+
+// Ordena una escalera (cíclica) para mostrar: empieza tras el mayor hueco y avanza,
+// colocando los comodines en sus huecos. Soporta el wrap …K A 2…
+function ordenarEscalera(cartas) {
+  const N = VALORES.length;
+  const idx = c => VALORES.indexOf(c.val);
+  const reales = cartas.filter(c => !esComodin(c));
+  const jokers = cartas.filter(c => esComodin(c));
+  if (reales.length === 0) return [...cartas];
+  const byPos = [...reales].sort((a, b) => idx(a) - idx(b));
+  const pos = byPos.map(idx);
+  // El run empieza en el real que está justo después del mayor hueco cíclico
+  let maxGap = -1, startI = 0;
+  for (let i = 0; i < pos.length; i++) {
+    const next = pos[(i + 1) % pos.length];
+    const gap = (next - pos[i] - 1 + N) % N;
+    if (gap > maxGap) { maxGap = gap; startI = (i + 1) % pos.length; }
+  }
+  const realEnPos = {};
+  byPos.forEach(c => { realEnPos[idx(c)] = c; });
+  const startPos = pos[startI];
+  const total = cartas.length;
+  const jk = [...jokers];
+  const out = [];
+  for (let k = 0; k < total; k++) {
+    const p = (startPos + k) % N;
+    if (realEnPos[p] !== undefined) out.push(realEnPos[p]);
+    else if (jk.length) out.push(jk.shift());
+  }
+  while (jk.length) out.push(jk.shift()); // por seguridad
+  return out;
+}
+
+// Mantiene el orden correcto para mostrar (las escaleras de izquierda a derecha)
+function ordenarCombo(tipo, cartas) {
+  return tipo === 'escalera' ? ordenarEscalera(cartas) : cartas;
+}
+
+// Extiende una escalera (ya ordenada) por un extremo. 'izquierda' = true → extremo bajo.
+// Devuelve la nueva combinación o null si no es legal. El comodín entra en cualquier extremo.
+function pegarEnEscalera(combo, carta, izquierda) {
+  const N = VALORES.length;
+  const idx = c => VALORES.indexOf(c.val);
+  if (combo.length + 1 > N) return null; // ya es la escalera máxima
+  const r = combo.findIndex(c => !esComodin(c));
+  if (r === -1) return null;
+  const low = ((idx(combo[r]) - r) % N + N) % N;       // valor del extremo izquierdo
+  const high = (low + combo.length - 1) % N;            // valor del extremo derecho
+  const requerido = izquierda ? ((low - 1 + N) % N) : ((high + 1) % N);
+  const palo = combo[r].palo;
+  if (!esComodin(carta)) {
+    if (carta.palo !== palo) return null;               // mismo palo
+    if (idx(carta) !== requerido) return null;          // debe encajar en ese extremo
+  }
+  return izquierda ? [carta, ...combo] : [...combo, carta];
 }
 
 function validarEtapa(etapaIdx, combinaciones) {
@@ -347,7 +401,8 @@ io.on('connection', socket => {
       mano.splice(i, 1);
     }
     g.manos[socket.id] = mano;
-    g.bajadasEtapa[socket.id] = combinaciones;
+    const partes = ETAPAS[etapaIdx].partes;
+    g.bajadasEtapa[socket.id] = combinaciones.map((combo, i) => ordenarCombo(partes[i], combo));
 
     emitirEstado(codigo);
   });
@@ -366,13 +421,19 @@ io.on('connection', socket => {
 
     const combo = g.bajadasEtapa[jugadorId][comboIdx];
     const tipo = ETAPAS[g.etapas[jugadorId]].partes[comboIdx];
+    const carta = mano[idx];
 
-    // Insertar carta en la posición indicada
-    const nuevaCombo = [...combo];
-    nuevaCombo.splice(posicion, 0, mano[idx]);
-
-    if (!validarCombinacion(tipo, nuevaCombo)) {
-      return socket.emit('error', 'No se puede pegar ahí');
+    let nuevaCombo;
+    if (tipo === 'trio') {
+      nuevaCombo = [...combo, carta];
+      if (!validarTrio(nuevaCombo)) return socket.emit('error', 'No se puede pegar ahí');
+    } else {
+      // Escalera: extender por el extremo elegido (posicion 0 = izquierda, si no derecha)
+      const izquierda = posicion <= 0;
+      nuevaCombo = pegarEnEscalera(combo, carta, izquierda);
+      if (!nuevaCombo) {
+        return socket.emit('error', izquierda ? 'Esa carta no va a la izquierda' : 'Esa carta no va a la derecha');
+      }
     }
 
     g.bajadasEtapa[jugadorId][comboIdx] = nuevaCombo;
