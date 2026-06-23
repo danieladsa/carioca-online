@@ -85,6 +85,15 @@ select {
 }
 select:focus { border-color: var(--gold); }
 .campo-label { display: block; font-size: 0.72rem; color: rgba(245,240,232,0.5); margin-bottom: 6px; letter-spacing: 0.05em; }
+/* Conmutador de idioma */
+.lang-switch { display: flex; gap: 3px; }
+.lang-btn {
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(201,168,76,0.4);
+  color: rgba(245,240,232,0.65); font-family: 'DM Mono', monospace; font-size: 0.7rem;
+  padding: 4px 9px; cursor: pointer; border-radius: 6px; transition: all 0.15s;
+}
+.lang-btn:hover { color: var(--cream); }
+.lang-btn.activo { background: var(--gold); color: var(--dark); border-color: var(--gold); font-weight: 500; }
 .btn {
   background: linear-gradient(135deg, var(--gold), #a0762e);
   border: none; border-radius: 8px;
@@ -527,46 +536,50 @@ select:focus { border-color: var(--gold); }
 
 <!-- ── LOBBY ── -->
 <div id="screen-lobby">
+  <div class="lang-switch" style="position:fixed; top:14px; right:16px; z-index:50;">
+    <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
+    <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+  </div>
   <div style="text-align:center">
     <h1>🃏 Carioca</h1>
-    <p class="subtitle">JUEGO DE CARTAS ONLINE</p>
+    <p class="subtitle" data-i18n="subtitulo">JUEGO DE CARTAS ONLINE</p>
   </div>
 
   <div class="lobby-box" id="box-inicio">
-    <h2>Entrar al juego</h2>
-    <input id="input-nombre" placeholder="Tu nombre" maxlength="20">
-    <button class="btn" onclick="mostrarOpciones()">Continuar →</button>
+    <h2 data-i18n="entrar">Entrar al juego</h2>
+    <input id="input-nombre" data-i18n-ph="tuNombre" placeholder="Tu nombre" maxlength="20">
+    <button class="btn" data-i18n="continuar" onclick="mostrarOpciones()">Continuar →</button>
   </div>
 
   <div class="lobby-box" id="box-opciones" style="display:none">
-    <button class="btn" onclick="crearSala()">Crear sala nueva</button>
-    <div class="divider">── o ──</div>
-    <input id="input-codigo" placeholder="Código de sala" maxlength="4" style="text-transform:uppercase; letter-spacing:0.2em; text-align:center;">
-    <button class="btn btn-outline" onclick="unirSala()">Unirse a sala →</button>
+    <button class="btn" data-i18n="crearSala" onclick="crearSala()">Crear sala nueva</button>
+    <div class="divider" data-i18n="o">── o ──</div>
+    <input id="input-codigo" data-i18n-ph="codigoSala" placeholder="Código de sala" maxlength="4" style="text-transform:uppercase; letter-spacing:0.2em; text-align:center;">
+    <button class="btn btn-outline" data-i18n="unirse" onclick="unirSala()">Unirse a sala →</button>
   </div>
 
   <div class="lobby-box" id="box-sala" style="display:none">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <h2>Sala: <span id="display-codigo" style="color:var(--gold);letter-spacing:0.2em"></span></h2>
-      <button class="btn btn-sm btn-outline" onclick="copiarCodigo()">Copiar</button>
+      <h2><span data-i18n="sala">Sala:</span> <span id="display-codigo" style="color:var(--gold);letter-spacing:0.2em"></span></h2>
+      <button class="btn btn-sm btn-outline" data-i18n="copiar" onclick="copiarCodigo()">Copiar</button>
     </div>
-    <p style="font-size:0.75rem;color:rgba(245,240,232,0.4)">Comparte el código con tus amigos</p>
+    <p style="font-size:0.75rem;color:rgba(245,240,232,0.4)" data-i18n="compartir">Comparte el código con tus amigos</p>
     <div id="lista-jugadores"></div>
     <div id="opciones-modo" style="display:none; flex-direction:column; gap:12px;">
       <div>
-        <label class="campo-label">Modo de juego</label>
+        <label class="campo-label" data-i18n="modoJuego">Modo de juego</label>
         <select id="sel-modo" onchange="onModoChange()">
           <option value="completa">Partida completa (12 etapas)</option>
           <option value="libre">Modo libre — 1 etapa a elección</option>
         </select>
       </div>
       <div id="campo-etapa" style="display:none">
-        <label class="campo-label">Etapa a jugar</label>
+        <label class="campo-label" data-i18n="etapaJugar">Etapa a jugar</label>
         <select id="sel-etapa"></select>
       </div>
     </div>
-    <button class="btn" id="btn-iniciar" onclick="iniciarJuego()" style="display:none">▶ Iniciar partida</button>
-    <p id="espera-msg" style="font-size:0.78rem;color:rgba(245,240,232,0.4);text-align:center">Esperando al anfitrión...</p>
+    <button class="btn" id="btn-iniciar" data-i18n="iniciar" onclick="iniciarJuego()" style="display:none">▶ Iniciar partida</button>
+    <p id="espera-msg" data-i18n="esperandoAnfitrion" style="font-size:0.78rem;color:rgba(245,240,232,0.4);text-align:center">Esperando al anfitrión...</p>
   </div>
 
   <div id="msg-error"></div>
@@ -577,6 +590,10 @@ select:focus { border-color: var(--gold); }
   <div id="game-header">
     <h1>🃏 Carioca</h1>
     <div class="header-info">
+      <div class="lang-switch">
+        <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
+        <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+      </div>
       <div class="ronda-badge">Ronda <span id="hdr-ronda">1</span></div>
       <span id="hdr-turno-texto">—</span>
     </div>
@@ -617,17 +634,17 @@ select:focus { border-color: var(--gold); }
           <span class="turno-indicator" id="mi-turno-badge">—</span>
         </div>
         <div class="panel-puntaje">
-          <div class="etapa-display">Etapa <span class="etapa-num" id="mi-etapa-num">1</span>/12 · <span id="mi-etapa-desc">—</span></div>
+          <div class="etapa-display" id="mi-etapa-display">Etapa 1/12 · —</div>
           <div id="puntos-tabla"></div>
         </div>
       </div>
-      <div class="mano-hint">✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar · clic para seleccionar</div>
+      <div class="mano-hint" data-i18n="hintMano">✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar · clic para seleccionar</div>
       <div id="mano-cartas"></div>
       <div id="zona-acciones">
-        <button class="btn btn-sm" onclick="abrirModalBajada()">⬇ Bajar etapa</button>
-        <button class="btn btn-sm btn-red" onclick="tirarSeleccionada()">🗑 Tirar carta</button>
-        <button class="btn btn-sm btn-outline" onclick="pegarSeleccionada()">+ Pegar a combo</button>
-        <button class="btn btn-sm btn-outline btn-zoom" id="btn-zoom" onclick="toggleZoomMano()">🔍 Zoom</button>
+        <button class="btn btn-sm" data-i18n="bajarEtapa" onclick="abrirModalBajada()">⬇ Bajar etapa</button>
+        <button class="btn btn-sm btn-red" data-i18n="tirarCarta" onclick="tirarSeleccionada()">🗑 Tirar carta</button>
+        <button class="btn btn-sm btn-outline" data-i18n="pegarCombo" onclick="pegarSeleccionada()">+ Pegar a combo</button>
+        <button class="btn btn-sm btn-outline btn-zoom" id="btn-zoom" data-i18n="zoom" onclick="toggleZoomMano()">🔍 Zoom</button>
       </div>
     </div>
   </div>
@@ -636,12 +653,12 @@ select:focus { border-color: var(--gold); }
 <!-- ── MODAL BAJADA ── -->
 <div id="modal-bajada">
   <div class="modal-box">
-    <h3>Bajar etapa</h3>
+    <h3 data-i18n="bajarTitulo">Bajar etapa</h3>
     <div class="modal-desc" id="modal-etapa-desc">—</div>
     <div class="combos-editor" id="combos-editor"></div>
     <div class="modal-acciones">
-      <button class="btn" onclick="confirmarBajada()">✓ Confirmar bajada</button>
-      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" data-i18n="confirmarBajada" onclick="confirmarBajada()">✓ Confirmar bajada</button>
+      <button class="btn btn-outline" data-i18n="cancelar" onclick="cerrarModal()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -651,7 +668,7 @@ select:focus { border-color: var(--gold); }
   <h2 id="fin-titulo">—</h2>
   <p id="fin-subtitulo">—</p>
   <div class="tabla-puntos" id="fin-tabla"></div>
-  <button class="btn" onclick="location.reload()">Nueva partida</button>
+  <button class="btn" data-i18n="nuevaPartida" onclick="location.reload()">Nueva partida</button>
 </div>
 
 <!-- ── TOAST ── -->
@@ -671,10 +688,82 @@ let combosModal = []; // [{cartas:[]}]
 let modoAccion = null; // 'pegar'
 let ordenMano = []; // orden visual local de la mano (ids), persistente entre renders
 
+// ── i18n (ES / EN) ────────────────────────────────────────────────────────────
+let LANG = 'es';
+try { LANG = localStorage.getItem('carioca_lang') || 'es'; } catch (e) {}
+const I18N = {
+  es: {
+    subtitulo: 'JUEGO DE CARTAS ONLINE', entrar: 'Entrar al juego', tuNombre: 'Tu nombre',
+    continuar: 'Continuar →', crearSala: 'Crear sala nueva', o: '── o ──', codigoSala: 'Código de sala',
+    unirse: 'Unirse a sala →', sala: 'Sala:', copiar: 'Copiar', compartir: 'Comparte el código con tus amigos',
+    iniciar: '▶ Iniciar partida', esperandoAnfitrion: 'Esperando al anfitrión...', modoJuego: 'Modo de juego',
+    partidaCompleta: 'Partida completa (12 etapas)', modoLibreOpt: 'Modo libre — 1 etapa a elección', etapaJugar: 'Etapa a jugar',
+    ronda: 'Ronda', modoLibre: '🎯 Modo libre', tuTurno: '✦ Tu turno', turnoDe: 'Turno de {n}',
+    robaCarta: 'Roba una carta', juegaOTira: 'Juega o tira', esperando: 'Esperando...',
+    etapa: 'Etapa', cartas: 'cartas', bajo: '· ✓ bajó',
+    bajarEtapa: '⬇ Bajar etapa', tirarCarta: '🗑 Tirar carta', pegarCombo: '+ Pegar a combo', zoom: '🔍 Zoom',
+    hintMano: '✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar · clic para seleccionar',
+    trio: 'TRÍO', escalera: 'ESCALERA', esperandoOponentes: 'Esperando oponentes...',
+    bajarTitulo: 'Bajar etapa', confirmarBajada: '✓ Confirmar bajada', cancelar: 'Cancelar',
+    cartasDeTuMano: 'Cartas de tu mano:', trioMin: 'Trío (mín. 3 del mismo valor)', escaleraMin: 'Escalera (mín. 4 seguidas del mismo palo)',
+    nuevaPartida: 'Nueva partida', puntFinal: 'Puntuación final (menos es mejor)', ganaJuego: '🏆 {n} gana el juego!', pts: 'pts',
+    etapasDesc: ['2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos','2 tríos + 1 escalera','1 trío + 2 escaleras','3 escaleras','4 tríos','3 tríos + 1 escalera','2 tríos + 2 escaleras','1 trío + 3 escaleras','4 escaleras'],
+    escribeNombre: 'Escribe tu nombre', escribeCodigo: 'Escribe un código de sala', codigoCopiado: 'Código copiado: {c}',
+    seDesconecto: '{n} se desconectó', noTurnoRobar: 'No es tu turno o debes robar primero', selecciona1Tirar: 'Selecciona exactamente 1 carta para tirar',
+    noTurno: 'No es tu turno', selecciona1Pegar: 'Selecciona 1 carta para pegar', elegirExtremo: 'Toca el lado IZQUIERDO o DERECHO del combo para elegir dónde pegar',
+    selecciona1: 'Selecciona 1 carta primero', yaBajaste: 'Ya bajaste tu etapa en esta ronda', minJugadores: 'Se necesitan al menos 2 jugadores',
+    rondaFin: '🏆 Ronda {r} terminada. ¡Ganó {n}!', comodin: 'el comodín',
+  },
+  en: {
+    subtitulo: 'ONLINE CARD GAME', entrar: 'Join the game', tuNombre: 'Your name',
+    continuar: 'Continue →', crearSala: 'Create new room', o: '── or ──', codigoSala: 'Room code',
+    unirse: 'Join room →', sala: 'Room:', copiar: 'Copy', compartir: 'Share the code with your friends',
+    iniciar: '▶ Start game', esperandoAnfitrion: 'Waiting for the host...', modoJuego: 'Game mode',
+    partidaCompleta: 'Full game (12 stages)', modoLibreOpt: 'Free mode — pick 1 stage', etapaJugar: 'Stage to play',
+    ronda: 'Round', modoLibre: '🎯 Free mode', tuTurno: '✦ Your turn', turnoDe: '{n}’s turn',
+    robaCarta: 'Draw a card', juegaOTira: 'Play or discard', esperando: 'Waiting...',
+    etapa: 'Stage', cartas: 'cards', bajo: '· ✓ down',
+    bajarEtapa: '⬇ Lay down', tirarCarta: '🗑 Discard', pegarCombo: '+ Add to meld', zoom: '🔍 Zoom',
+    hintMano: '✋ Hover (or tap 🔍 Zoom) to enlarge your hand · drag to reorder · click to select',
+    trio: 'SET', escalera: 'RUN', esperandoOponentes: 'Waiting for opponents...',
+    bajarTitulo: 'Lay down stage', confirmarBajada: '✓ Confirm', cancelar: 'Cancel',
+    cartasDeTuMano: 'Cards from your hand:', trioMin: 'Set (min. 3 of the same value)', escaleraMin: 'Run (min. 4 in sequence, same suit)',
+    nuevaPartida: 'New game', puntFinal: 'Final score (less is better)', ganaJuego: '🏆 {n} wins the game!', pts: 'pts',
+    etapasDesc: ['2 sets','1 set + 1 run','2 runs','3 sets','2 sets + 1 run','1 set + 2 runs','3 runs','4 sets','3 sets + 1 run','2 sets + 2 runs','1 set + 3 runs','4 runs'],
+    escribeNombre: 'Enter your name', escribeCodigo: 'Enter a room code', codigoCopiado: 'Code copied: {c}',
+    seDesconecto: '{n} disconnected', noTurnoRobar: "It's not your turn or you must draw first", selecciona1Tirar: 'Select exactly 1 card to discard',
+    noTurno: "It's not your turn", selecciona1Pegar: 'Select 1 card to add', elegirExtremo: 'Tap the LEFT or RIGHT side of the meld to choose where to add',
+    selecciona1: 'Select 1 card first', yaBajaste: 'You already laid down this round', minJugadores: 'At least 2 players are required',
+    rondaFin: '🏆 Round {r} over. {n} won!', comodin: 'the wild card',
+  },
+};
+function t(k, p) {
+  const d = I18N[LANG] || I18N.es;
+  let s = d[k] !== undefined ? d[k] : (I18N.es[k] !== undefined ? I18N.es[k] : k);
+  if (p && typeof s === 'string') for (const key in p) s = s.split('{' + key + '}').join(p[key]);
+  return s;
+}
+function setLang(l) {
+  LANG = l;
+  try { localStorage.setItem('carioca_lang', l); } catch (e) {}
+  aplicarIdioma();
+}
+function aplicarIdioma() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('activo', b.getAttribute('data-lang') === LANG));
+  const sm = document.getElementById('sel-modo');
+  if (sm && sm.options.length >= 2) { sm.options[0].textContent = t('partidaCompleta'); sm.options[1].textContent = t('modoLibreOpt'); }
+  const sel = document.getElementById('sel-etapa');
+  if (sel) { const v = sel.value; sel.innerHTML = t('etapasDesc').map((d, i) => `<option value="${i}">${t('etapa')} ${i + 1}: ${d}</option>`).join(''); if (v) sel.value = v; }
+  if (estado) renderEstado();
+}
+
 // ── Lobby ────────────────────────────────────────────────────────────────────
 function mostrarOpciones() {
   miNombre = document.getElementById('input-nombre').value.trim();
-  if (!miNombre) return toast('Escribe tu nombre');
+  if (!miNombre) return toast(t('escribeNombre'));
   document.getElementById('box-inicio').style.display = 'none';
   document.getElementById('box-opciones').style.display = '';
 }
@@ -685,7 +774,7 @@ function crearSala() {
 
 function unirSala() {
   const codigo = document.getElementById('input-codigo').value.trim().toUpperCase();
-  if (!codigo) return toast('Escribe un código de sala');
+  if (!codigo) return toast(t('escribeCodigo'));
   socket.emit('unirSala', { codigo, nombre: miNombre });
 }
 
@@ -701,7 +790,7 @@ function onModoChange() {
 }
 
 function copiarCodigo() {
-  navigator.clipboard.writeText(salaActual).then(() => toast('Código copiado: ' + salaActual));
+  navigator.clipboard.writeText(salaActual).then(() => toast(t('codigoCopiado', { c: salaActual })));
 }
 
 socket.on('salaCreada', ({ codigo, jugadores }) => {
@@ -734,8 +823,8 @@ function mostrarSala(codigo, jugadores) {
     opt.style.display = 'flex';
     const sel = document.getElementById('sel-etapa');
     if (!sel.options.length) {
-      sel.innerHTML = ETAPAS_DESC_ARR
-        .map((d, i) => `<option value="${i}">Etapa ${i + 1}: ${d}</option>`)
+      sel.innerHTML = t('etapasDesc')
+        .map((d, i) => `<option value="${i}">${t('etapa')} ${i + 1}: ${d}</option>`)
         .join('');
     }
   }
@@ -762,23 +851,23 @@ socket.on('estado', (e) => {
 });
 
 socket.on('finRonda', ({ ganador, nombreGanador, puntos, ronda }) => {
-  toast(`🏆 Ronda ${ronda} terminada. Ganó ${nombreGanador}!`);
+  toast(t('rondaFin', { r: ronda, n: nombreGanador }));
 });
 
 socket.on('finJuego', ({ ganador, nombre, puntos }) => {
-  document.getElementById('fin-titulo').textContent = `🏆 ${nombre} gana el juego!`;
-  document.getElementById('fin-subtitulo').textContent = 'Puntuación final (menos es mejor)';
+  document.getElementById('fin-titulo').textContent = t('ganaJuego', { n: nombre });
+  document.getElementById('fin-subtitulo').textContent = t('puntFinal');
   const rows = Object.entries(puntos)
     .map(([id, pts]) => ({ nombre: estado?.nombres[id] || id, pts }))
     .sort((a, b) => a.pts - b.pts);
   document.getElementById('fin-tabla').innerHTML =
-    rows.map(r => `<div class="tabla-puntos-row"><span>${r.nombre}</span><span>${r.pts} pts</span></div>`).join('');
+    rows.map(r => `<div class="tabla-puntos-row"><span>${r.nombre}</span><span>${r.pts} ${t('pts')}</span></div>`).join('');
   document.getElementById('overlay-fin').classList.add('visible');
 });
 
 socket.on('error', (msg) => toast('⚠ ' + msg));
 
-socket.on('jugadorDesconectado', ({ nombre }) => toast(`${nombre} se desconectó`));
+socket.on('jugadorDesconectado', ({ nombre }) => toast(t('seDesconecto', { n: nombre })));
 
 // ── Helpers de mesa ─────────────────────────────────────────────────────────
 const AVATARES = ['🦊','🐼','🐧','🐸','🦉','🐙','🐳','🦁','🐯','🐵','🐨','🦄'];
@@ -794,28 +883,24 @@ function renderEstado() {
 
   // Header
   const rb = document.querySelector('.ronda-badge');
-  if (rb) rb.textContent = e.modoLibre ? '🎯 Modo libre' : ('Ronda ' + e.ronda);
+  if (rb) rb.textContent = e.modoLibre ? t('modoLibre') : (t('ronda') + ' ' + e.ronda);
   const turnNombre = e.nombres[e.turno] || '—';
   document.getElementById('hdr-turno-texto').textContent =
-    e.soyYo ? '✦ Tu turno' : `Turno de ${turnNombre}`;
+    e.soyYo ? t('tuTurno') : t('turnoDe', { n: turnNombre });
 
   // Mi info
   const miEtapaIdx = e.etapas[miId] || 0;
-  const ETAPAS_DESC = [
-    '2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos',
-    '2 tríos + 1 escalera','1 trío + 2 escaleras','3 escaleras','4 tríos',
-    '3 tríos + 1 escalera','2 tríos + 2 escaleras','1 trío + 3 escaleras','4 escaleras'
-  ];
+  const ETAPAS_DESC = t('etapasDesc');
   document.getElementById('mi-nombre-display').textContent = miNombre || 'Tú';
-  document.getElementById('mi-etapa-num').textContent = miEtapaIdx + 1;
-  document.getElementById('mi-etapa-desc').textContent = ETAPAS_DESC[miEtapaIdx] || '—';
+  document.getElementById('mi-etapa-display').textContent =
+    t('etapa') + ' ' + (miEtapaIdx + 1) + '/12 · ' + (ETAPAS_DESC[miEtapaIdx] || '—');
 
   const badge = document.getElementById('mi-turno-badge');
   if (e.soyYo) {
-    badge.textContent = e.fase === 'robar' ? 'Roba una carta' : 'Juega o tira';
+    badge.textContent = e.fase === 'robar' ? t('robaCarta') : t('juegaOTira');
     badge.className = 'turno-indicator turno-yo';
   } else {
-    badge.textContent = 'Esperando...';
+    badge.textContent = t('esperando');
     badge.className = 'turno-indicator turno-otro';
   }
 
@@ -834,7 +919,7 @@ function renderEstado() {
   }).join('');
 
   // Mazo y descarte
-  document.getElementById('mazo-count').textContent = e.mazoSize + ' cartas';
+  document.getElementById('mazo-count').textContent = e.mazoSize + ' ' + t('cartas');
   const topDesc = e.descarte[e.descarte.length - 1];
   document.getElementById('btn-descarte').innerHTML = topDesc ? cartaHTML(topDesc, false) : '';
 
@@ -864,7 +949,7 @@ function renderEstado() {
       const tipo = tipos[ci] || '';
       const area = document.createElement('div');
       area.className = 'combo-area';
-      area.innerHTML = `<div class="combo-tipo">${tipo === 'trio' ? 'TRÍO' : 'ESCALERA'}</div>` +
+      area.innerHTML = `<div class="combo-tipo">${tipo === 'trio' ? t('trio') : t('escalera')}</div>` +
         combo.map(c => cartaHTML(c, false)).join('');
       area.onclick = (ev) => pegarEnCombo(id, ci, ev);
       wrap.appendChild(area);
@@ -875,7 +960,7 @@ function renderEstado() {
 
   const oponentes = e.jugadores.filter(id => id !== miId);
   if (oponentes.length === 0) {
-    celdaTop.innerHTML = '<span class="sin-oponentes">Esperando oponentes...</span>';
+    celdaTop.innerHTML = `<span class="sin-oponentes">${t('esperandoOponentes')}</span>`;
   } else {
     // 1 → arriba; 2 → izq/der; 3 → izq/arriba/der
     const areas = oponentes.length <= 1 ? ['top']
@@ -887,7 +972,7 @@ function renderEstado() {
       const nombre = e.nombres[id] || id;
       const cantCartas = e.manosAjenas[id] || 0;
       const etapaOp = e.etapas[id] || 0;
-      const bajado = e.bajadasEtapa[id] ? '· ✓ bajó' : '';
+      const bajado = e.bajadasEtapa[id] ? t('bajo') : '';
       const dorsos = Array(cantCartas).fill('<span class="carta-dorso"></span>').join('');
       const activo = e.turno === id ? ' seat-activo' : '';
       const seat = document.createElement('div');
@@ -897,7 +982,7 @@ function renderEstado() {
           <div class="seat-avatar">${avatarDe(id)}</div>
           <div class="seat-meta">
             <div class="seat-nombre">${nombre}${e.turno === id ? ' 🎯' : ''}</div>
-            <div class="seat-stats">Etapa ${etapaOp+1} · ${cantCartas} cartas ${bajado}</div>
+            <div class="seat-stats">${t('etapa')} ${etapaOp+1} · ${cantCartas} ${t('cartas')} ${bajado}</div>
           </div>
         </div>
         <div class="seat-cartas">${dorsos}</div>`;
@@ -1102,22 +1187,22 @@ function robarDescarte() {
 }
 
 function tirarSeleccionada() {
-  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno o debes robar primero');
-  if (cartasSeleccionadas.length !== 1) return toast('Selecciona exactamente 1 carta para tirar');
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurnoRobar'));
+  if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1Tirar'));
   socket.emit('tirarCarta', { cartaId: cartasSeleccionadas[0] });
   cartasSeleccionadas = [];
 }
 
 function pegarSeleccionada() {
-  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno');
-  if (cartasSeleccionadas.length !== 1) return toast('Selecciona 1 carta para pegar');
-  toast('Toca el lado IZQUIERDO o DERECHO del combo para elegir dónde pegar');
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurno'));
+  if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1Pegar'));
+  toast(t('elegirExtremo'));
   modoAccion = 'pegar';
 }
 
 function pegarEnCombo(jugadorId, comboIdx, ev) {
   if (modoAccion !== 'pegar') return;
-  if (cartasSeleccionadas.length !== 1) return toast('Selecciona 1 carta primero');
+  if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1'));
   // El lado donde se hace clic decide el extremo: izquierda = posición 0, derecha = final
   const rect = ev.currentTarget.getBoundingClientRect();
   const izquierda = (ev.clientX - rect.left) < rect.width / 2;
@@ -1145,11 +1230,11 @@ const ETAPAS_DESC_ARR = [
 ];
 
 function abrirModalBajada() {
-  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast('No es tu turno o debes robar primero');
-  if (estado.bajadasEtapa[miId]) return toast('Ya bajaste tu etapa en esta ronda');
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurnoRobar'));
+  if (estado.bajadasEtapa[miId]) return toast(t('yaBajaste'));
   const etapaIdx = estado.etapas[miId] || 0;
   const partes = ETAPAS_PARTES[etapaIdx];
-  document.getElementById('modal-etapa-desc').textContent = ETAPAS_DESC_ARR[etapaIdx];
+  document.getElementById('modal-etapa-desc').textContent = t('etapasDesc')[etapaIdx];
   combosModal = partes.map(tipo => ({ tipo, cartas: [] }));
   renderModalCombos();
   document.getElementById('modal-bajada').classList.add('visible');
@@ -1167,11 +1252,11 @@ function renderModalCombos() {
   combosModal.forEach((combo, ci) => {
     const div = document.createElement('div');
     div.className = 'combo-editor';
-    const tipoLabel = combo.tipo === 'trio' ? 'Trío (mín. 3 del mismo valor)' : 'Escalera (mín. 4 seguidas del mismo palo)';
+    const tipoLabel = combo.tipo === 'trio' ? t('trioMin') : t('escaleraMin');
     div.innerHTML = `<div class="combo-editor-titulo">${ci+1}. ${tipoLabel}</div>
       <div class="combo-editor-cartas" id="modal-combo-${ci}"></div>
       <div class="combo-editor-acciones">
-        <span style="font-size:0.7rem;color:rgba(245,240,232,0.4)">Cartas de tu mano:</span>
+        <span style="font-size:0.7rem;color:rgba(245,240,232,0.4)">${t('cartasDeTuMano')}</span>
       </div>`;
     ed.appendChild(div);
 
@@ -1239,6 +1324,9 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('visible'), 3000);
 }
+
+// Aplicar el idioma guardado al cargar
+aplicarIdioma();
 </script>
 </body>
 </html>
