@@ -143,8 +143,8 @@ input::placeholder { color: rgba(245,240,232,0.3); }
   background: transparent;
   overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 1.4fr minmax(150px, 1fr);
-  grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(130px, 0.8fr) 2.1fr minmax(130px, 0.8fr);
+  grid-template-rows: auto minmax(150px, 1fr) auto;
   grid-template-areas:
     "left top    right"
     "left center right"
@@ -161,7 +161,7 @@ input::placeholder { color: rgba(245,240,232,0.3); }
 }
 
 /* Celdas alrededor de la mesa */
-.celda { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; z-index: 2; }
+.celda { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: visible; z-index: 2; }
 .celda-top   { grid-area: top;   align-items: center;     justify-content: flex-start; }
 .celda-left  { grid-area: left;  align-items: flex-start; justify-content: center; }
 .celda-right { grid-area: right; align-items: flex-end;   justify-content: center; }
@@ -169,9 +169,16 @@ input::placeholder { color: rgba(245,240,232,0.3); }
 .celda-mine  { grid-area: mine;  align-items: center; justify-content: flex-end; }
 .sin-oponentes { font-size: 0.78rem; color: rgba(245,240,232,0.45); text-align: center; width: 100%; }
 
-/* Grupo de combos de un jugador */
-.meld-group { display: flex; flex-direction: column; gap: 6px; }
-.meld-group-combos { display: flex; gap: 12px; flex-wrap: wrap; }
+/* Grupo de combos de un jugador: SIEMPRE en una sola línea; si excede, scroll horizontal */
+.meld-group { display: flex; flex-direction: column; gap: 6px; max-width: 100%; min-width: 0; }
+.meld-group-combos {
+  display: flex; gap: 12px; flex-wrap: nowrap;
+  overflow-x: auto; overflow-y: hidden;
+  max-width: 100%; min-width: 0; padding-bottom: 3px;
+}
+/* Izquierda y derecha: aprovechan su alto → los combos bajan en filas (wrap) */
+.celda-left  .meld-group-combos,
+.celda-right .meld-group-combos { flex-wrap: wrap; overflow-x: visible; }
 .celda-left  .meld-group-combos { justify-content: flex-start; }
 .celda-right .meld-group-combos { justify-content: flex-end; }
 .celda-top   .meld-group-combos,
@@ -256,11 +263,14 @@ input::placeholder { color: rgba(245,240,232,0.3); }
 .combo-area {
   background: rgba(0,0,0,0.22);
   border: 1px dashed rgba(201,168,76,0.35);
-  border-radius: 10px; padding: 5px 7px;
-  display: flex; gap: 4px; flex-wrap: wrap;
-  min-width: 70px; min-height: 40px;
+  border-radius: 10px; padding: 5px 8px;
+  display: flex; gap: 0; flex-wrap: wrap;
+  flex: 0 0 auto;
+  min-width: 56px; min-height: 40px;
   cursor: pointer; transition: border-color 0.2s;
 }
+/* Cartas del combo superpuestas en abanico (compactas, legibles por la esquina) */
+.combo-area .carta + .carta { margin-left: -30px; }
 .combo-area:hover { border-color: var(--gold); }
 .combo-tipo { font-size: 0.62rem; color: rgba(245,240,232,0.4); margin-bottom: 2px; width: 100%; }
 
@@ -365,6 +375,16 @@ input::placeholder { color: rgba(245,240,232,0.3); }
 .carta-inner { display: flex; flex-direction: column; align-items: center; }
 .carta-val { font-size: 1rem; font-weight: 700; line-height: 1; }
 .carta-palo { font-size: 1.3rem; line-height: 1; }
+/* Índice en la esquina (visible aunque las cartas se superpongan) */
+.carta-corner {
+  position: absolute; top: 3px; left: 5px;
+  font-size: 0.56rem; font-weight: 700; line-height: 0.95;
+  text-align: center; font-family: 'Playfair Display', serif;
+  pointer-events: none;
+}
+.carta.roja .carta-corner { color: var(--red); }
+.carta.negra .carta-corner { color: #111; }
+.carta.comodin .carta-corner { color: var(--gold); font-size: 0.7rem; }
 .carta.roja .carta-val, .carta.roja .carta-palo { color: var(--red); }
 .carta.negra .carta-val, .carta.negra .carta-palo { color: #111; }
 .carta.comodin { background: linear-gradient(135deg, #2c3e50, #1a252f); }
@@ -745,7 +765,8 @@ function renderEstado() {
   const e = estado;
 
   // Header
-  document.getElementById('hdr-ronda').textContent = e.ronda;
+  const rb = document.querySelector('.ronda-badge');
+  if (rb) rb.textContent = e.modoLibre ? '🎯 Modo libre' : ('Ronda ' + e.ronda);
   const turnNombre = e.nombres[e.turno] || '—';
   document.getElementById('hdr-turno-texto').textContent =
     e.soyYo ? '✦ Tu turno' : `Turno de ${turnNombre}`;
@@ -1028,7 +1049,9 @@ function cartaHTML(carta, clickable) {
   const esComodin = carta.val === '🃏';
   const cls = esComodin ? 'comodin' : (esRoja ? 'roja' : 'negra');
   const selCls = cartasSeleccionadas.includes(carta.id) ? ' seleccionada' : '';
+  const corner = esComodin ? '★' : `${carta.val}<br>${carta.palo}`;
   return `<div class="carta ${cls}${selCls}" data-id="${carta.id}">
+    <span class="carta-corner">${corner}</span>
     <div class="carta-inner">
       <span class="carta-val">${esComodin ? '' : carta.val}</span>
       <span class="carta-palo">${esComodin ? '🃏' : carta.palo}</span>
@@ -1200,41 +1223,43 @@ function C(val, palo) { return { id: 'c' + (++_uid), val, palo }; }
 
 function nuevoEstadoDemo() {
   return {
-    ronda: 1,
+    ronda: 7,
     turno: 'yo',
     soyYo: true,
     fase: 'jugar',
     jugadores: ['daniel', 'luna', 'pudding', 'yo'],
     nombres: { yo: 'Tú (demo)', daniel: 'daniel', luna: 'luna', pudding: 'pudding' },
-    etapas: { yo: 0, daniel: 0, luna: 0, pudding: 2 }, // yo/daniel/luna: 2 tríos · pudding: 2 escaleras
-    puntos: { yo: 0, daniel: 5, luna: 10, pudding: 15 },
-    mazoSize: 73,
+    etapas: { yo: 6, daniel: 6, luna: 6, pudding: 6 }, // Etapa 7 = 3 escaleras (casi terminando)
+    puntos: { yo: 18, daniel: 34, luna: 27, pudding: 41 },
+    mazoSize: 31,
     descarte: [ C('7', '♦') ],
-    manosAjenas: { daniel: 6, luna: 8, pudding: 4 },
-    // Todos ya bajaron sus combinaciones
+    manosAjenas: { daniel: 2, luna: 1, pudding: 3 },
+    // Todos bajaron sus 3 escaleras
     bajadasEtapa: {
       daniel: [
-        [ C('10', '♦'), C('10', '♥'), C('10', '♠') ],
-        [ C('K', '♣'),  C('K', '♠'),  C('K', '♣') ],
+        [ C('3', '♠'), C('4', '♠'), C('5', '♠'), C('6', '♠') ],
+        [ C('7', '♥'), C('8', '♥'), C('9', '♥'), C('10', '♥') ],
+        [ C('9', '♦'), C('10', '♦'), C('J', '♦'), C('Q', '♦') ],
       ],
       luna: [
-        [ C('9', '♦'), C('9', '♥'), C('9', '♠') ],
-        [ C('J', '♣'), C('J', '♠'), C('J', '♥') ],
-      ],
-      pudding: [
-        [ C('4', '♠'), C('5', '♠'), C('6', '♠'), C('7', '♠') ],
+        [ C('4', '♣'), C('5', '♣'), C('6', '♣'), C('7', '♣') ],
+        [ C('2', '♦'), C('3', '♦'), C('4', '♦'), C('5', '♦') ],
         [ C('9', '♥'), C('10', '♥'), C('J', '♥'), C('Q', '♥') ],
       ],
+      pudding: [
+        [ C('3', '♥'), C('4', '♥'), C('5', '♥'), C('6', '♥') ],
+        [ C('8', '♠'), C('9', '♠'), C('10', '♠'), C('J', '♠') ],
+        [ C('6', '♣'), C('7', '♣'), C('8', '♣'), C('9', '♣') ],
+      ],
       yo: [
-        [ C('Q', '♠'), C('Q', '♥'), C('Q', '♦') ],
-        [ C('A', '♠'), C('A', '♥'), C('A', '♦') ],
+        [ C('5', '♦'), C('6', '♦'), C('7', '♦'), C('8', '♦') ],
+        [ C('2', '♠'), C('3', '♠'), C('4', '♠'), C('5', '♠') ],
+        [ C('J', '♥'), C('Q', '♥'), C('K', '♥'), C('A', '♥') ],
       ],
     },
-    // Mi mano de prueba
+    // Mi mano (pocas cartas, casi terminando)
     miMano: [
-      C('8', '♠'), C('4', '♠'), C('J', '♦'), C('7', '♥'),
-      C('K', '♥'), C('4', '♣'), C('J', '♠'), C('9', '♦'),
-      C('2', '♣'), C('🃏', '🃏'),
+      C('K', '♣'), C('3', '♣'), C('7', '♠'), C('🃏', '🃏'),
     ],
   };
 }

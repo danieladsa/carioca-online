@@ -114,25 +114,31 @@ function validarEtapa(etapaIdx, combinaciones) {
 // ── Estado de partidas ────────────────────────────────────────────────────────
 const salas = {};
 
-function nuevaPartida(jugadores) {
+function nuevaPartida(jugadores, opciones = {}) {
   const mazo = barajar(crearMazo());
   const manos = {};
   jugadores.forEach(id => {
     manos[id] = mazo.splice(0, 12);
   });
   const descarte = [mazo.splice(0, 1)[0]];
+  // Modo libre: una sola partida de la etapa elegida; si no, partida completa (12 etapas)
+  const modoLibre = opciones.modo === 'libre';
+  const etapaInicial = modoLibre
+    ? Math.max(0, Math.min(11, parseInt(opciones.etapaInicial, 10) || 0))
+    : 0;
   return {
     jugadores,
     manos,
     mazo,
     descarte,
     turno: jugadores[0],
-    etapas: Object.fromEntries(jugadores.map(id => [id, 0])),
+    etapas: Object.fromEntries(jugadores.map(id => [id, etapaInicial])),
     bajadasEtapa: Object.fromEntries(jugadores.map(id => [id, null])),
     puntos: Object.fromEntries(jugadores.map(id => [id, 0])),
     ronda: 1,
     fase: 'robar', // robar | jugar
     nombres: {},
+    modoLibre,
   };
 }
 
@@ -153,6 +159,7 @@ function estadoPublico(sala, pov) {
     ronda: g.ronda,
     nombres: g.nombres,
     jugadores: g.jugadores,
+    modoLibre: !!g.modoLibre,
     manosAjenas: Object.fromEntries(otros.map(id => [id, g.manos[id]?.length ?? 0])),
   };
 }
@@ -199,15 +206,21 @@ function verificarRondaTerminada(codigoSala) {
   // Nueva ronda después de 4 segundos
   setTimeout(() => {
     if (!salas[codigoSala]) return;
-    // Avanzar etapa del ganador de la ronda
-    if (g.etapas[ganador] < 11) g.etapas[ganador]++;
 
-    // Si alguien llega a la etapa 12 y gana → fin del juego
-    const campeón = g.jugadores.find(id => g.etapas[id] >= 12 && g.bajadasEtapa[id]);
-    if (campeón) {
-      io.to(codigoSala).emit('finJuego', { ganador: campeón, nombre: g.nombres[campeón], puntos: g.puntos });
+    // La etapa que se acaba de jugar (todos juegan la misma etapa en cada ronda)
+    const etapaJugada = g.etapas[ganador];
+
+    // Modo libre = una sola etapa → o partida completa terminó (etapa 12) → fin del juego
+    if (g.modoLibre || etapaJugada >= 11) {
+      // Gana quien tenga MENOS puntos acumulados
+      const ranking = [...g.jugadores].sort((a, b) => g.puntos[a] - g.puntos[b]);
+      const campeon = ranking[0];
+      io.to(codigoSala).emit('finJuego', { ganador: campeon, nombre: g.nombres[campeon], puntos: g.puntos });
       return;
     }
+
+    // Avanzar de etapa a TODOS los jugadores (no solo al ganador)
+    g.jugadores.forEach(id => { g.etapas[id]++; });
 
     // Reiniciar ronda
     const nuevoMazo = barajar(crearMazo());
@@ -254,13 +267,13 @@ io.on('connection', socket => {
     console.log(`${nombre} se unió a sala ${codigo}`);
   });
 
-  socket.on('iniciarJuego', () => {
+  socket.on('iniciarJuego', (opciones) => {
     const codigo = socket.salaActual;
     const sala = salas[codigo];
     if (!sala || sala.jugadores[0] !== socket.id) return;
     if (sala.jugadores.length < 2) return socket.emit('error', 'Se necesitan al menos 2 jugadores');
 
-    sala.game = nuevaPartida(sala.jugadores);
+    sala.game = nuevaPartida(sala.jugadores, opciones || {});
     sala.game.nombres = sala.nombres;
     emitirEstado(codigo);
     io.to(codigo).emit('juegoIniciado');
