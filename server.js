@@ -30,15 +30,16 @@ const ETAPAS = [
 ];
 
 // ── Helpers de cartas ─────────────────────────────────────────────────────────
+let _cartaSeq = 0; // contador global → cada carta tiene un id ÚNICO (sin colisiones)
 function crearMazo() {
   const mazo = [];
   for (let d = 0; d < 2; d++) {
     for (const palo of PALOS) {
       for (const val of VALORES) {
-        mazo.push({ val, palo, id: `${val}${palo}-${d}` });
+        mazo.push({ val, palo, id: 'k' + (_cartaSeq++) });
       }
     }
-    mazo.push({ val: COMODIN, palo: '', id: `comodin-${d}` });
+    mazo.push({ val: COMODIN, palo: '', id: 'k' + (_cartaSeq++) });
   }
   return mazo;
 }
@@ -291,20 +292,106 @@ function verificarRondaTerminada(codigoSala) {
   return true;
 }
 
+// ── Reconexión ────────────────────────────────────────────────────────────────
+const GRACE_MS = 90000; // tiempo que se guarda el lugar de un jugador desconectado
+
+// Cambia la clave de un jugador (oldId → newId) en TODAS las estructuras de la sala/partida
+function remapearJugador(sala, oldId, newId) {
+  if (oldId === newId) return;
+  sala.jugadores = sala.jugadores.map(id => (id === oldId ? newId : id));
+  if (sala.nombres[oldId] !== undefined) { sala.nombres[newId] = sala.nombres[oldId]; delete sala.nombres[oldId]; }
+  const token = sala.tokens?.[oldId];
+  if (token) { delete sala.tokens[oldId]; sala.tokens[newId] = token; sala.slots[token] = newId; }
+  const g = sala.game;
+  if (g) {
+    g.jugadores = g.jugadores.map(id => (id === oldId ? newId : id));
+    for (const m of ['manos', 'etapas', 'bajadasEtapa', 'puntos', 'nombres']) {
+      if (g[m] && Object.prototype.hasOwnProperty.call(g[m], oldId)) { g[m][newId] = g[m][oldId]; delete g[m][oldId]; }
+    }
+    if (g.turno === oldId) g.turno = newId;
+  }
+}
+
+// Quita definitivamente a un jugador (se acabó el tiempo de gracia sin reconexión)
+function removerJugadorDefinitivo(codigo, token) {
+  const sala = salas[codigo];
+  if (!sala) return;
+  const slotId = sala.slots?.[token];
+  if (!slotId) return;
+  const nombre = sala.nombres[slotId];
+  const g = sala.game;
+  if (g) {
+    const eraSuTurno = g.turno === slotId;
+    const idx = g.jugadores.indexOf(slotId);
+    g.jugadores = g.jugadores.filter(id => id !== slotId);
+    ['manos', 'etapas', 'bajadasEtapa', 'puntos', 'nombres'].forEach(m => { if (g[m]) delete g[m][slotId]; });
+    if (eraSuTurno && g.jugadores.length) { g.turno = g.jugadores[idx % g.jugadores.length]; g.fase = 'robar'; }
+  }
+  sala.jugadores = sala.jugadores.filter(id => id !== slotId);
+  delete sala.nombres[slotId];
+  if (sala.tokens) delete sala.tokens[slotId];
+  if (sala.slots) delete sala.slots[token];
+  if (sala.timeouts) delete sala.timeouts[token];
+  io.to(codigo).emit('jugadorSalio', { nombre });
+  if (sala.jugadores.length === 0) { delete salas[codigo]; return; }
+  if (sala.game && sala.game.jugadores.length < 2) {
+    // Solo queda 1 jugador → gana por abandono
+    const ganador = sala.game.jugadores[0];
+    io.to(codigo).emit('finJuego', { ganador, nombre: sala.game.nombres[ganador], puntos: sala.game.puntos });
+    return;
+  }
+  if (sala.game) emitirEstado(codigo);
+}
+
 // ── Socket.io ─────────────────────────────────────────────────────────────────
 io.on('connection', socket => {
   console.log('conectado:', socket.id);
 
-  socket.on('crearSala', ({ nombre }) => {
-    const codigo = Math.random().toString(36).slice(2, 6).toUpperCase();
-    salas[codigo] = { jugadores: [socket.id], nombres: { [socket.id]: nombre }, game: null };
+  // Registra el token del jugador en la sala (para reconexión)
+  function registrarToken(sala, token) {
+    if (!token) return;
+    sala.tokens = sala.tokens || {};
+    sala.slots = sala.slots || {};
+    sala.timeouts = sala.timeouts || {};
+    sala.tokens[socket.id] = token;
+    sala.slots[token] = socket.id;
+    socket.token = token;
+  }
+
+  // Reconexión: vuelve a tomar el lugar guardado con el mismo token
+  socket.on('reconectar', ({ codigo, token }) => {
+    const sala = salas[codigo];
+    if (!sala || !token || !sala.slots || !sala.slots[token]) {
+      return socket.emit('reconexionFallida');
+    }
+    const oldId = sala.slots[token];
+    if (sala.timeouts && sala.timeouts[token]) { clearTimeout(sala.timeouts[token]); delete sala.timeouts[token]; }
+    remapearJugador(sala, oldId, socket.id);
     socket.join(codigo);
     socket.salaActual = codigo;
+    socket.token = token;
+    if (sala.desconectados) delete sala.desconectados[token];
+    const jugadoresInfo = sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] }));
+    io.to(codigo).emit('jugadorReconectado', { nombre: sala.nombres[socket.id], jugadores: jugadoresInfo });
+    if (sala.game) {
+      socket.emit('juegoIniciado');
+      socket.emit('estado', estadoPublico(sala, socket.id));
+    } else {
+      socket.emit('salaUnida', { codigo, jugadores: jugadoresInfo });
+    }
+  });
+
+  socket.on('crearSala', ({ nombre, token }) => {
+    const codigo = Math.random().toString(36).slice(2, 6).toUpperCase();
+    salas[codigo] = { jugadores: [socket.id], nombres: { [socket.id]: nombre }, game: null, tokens: {}, slots: {}, timeouts: {}, desconectados: {} };
+    socket.join(codigo);
+    socket.salaActual = codigo;
+    registrarToken(salas[codigo], token);
     socket.emit('salaCreada', { codigo, jugadores: [{ id: socket.id, nombre }] });
     console.log(`Sala ${codigo} creada por ${nombre}`);
   });
 
-  socket.on('unirSala', ({ codigo, nombre }) => {
+  socket.on('unirSala', ({ codigo, nombre, token }) => {
     const sala = salas[codigo];
     if (!sala) return socket.emit('error', 'Sala no encontrada');
     if (sala.jugadores.length >= 4) return socket.emit('error', 'Sala llena (máx 4)');
@@ -314,6 +401,7 @@ io.on('connection', socket => {
     sala.nombres[socket.id] = nombre;
     socket.join(codigo);
     socket.salaActual = codigo;
+    registrarToken(sala, token);
 
     const jugadoresInfo = sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] }));
     io.to(codigo).emit('jugadorUnido', { jugadores: jugadoresInfo });
@@ -445,11 +533,30 @@ io.on('connection', socket => {
 
   socket.on('disconnect', () => {
     const codigo = socket.salaActual;
-    if (codigo && salas[codigo]) {
-      io.to(codigo).emit('jugadorDesconectado', { id: socket.id, nombre: salas[codigo].nombres[socket.id] });
-      // Limpiar sala si todos se van
-      salas[codigo].jugadores = salas[codigo].jugadores.filter(id => id !== socket.id);
-      if (salas[codigo].jugadores.length === 0) delete salas[codigo];
+    const sala = codigo && salas[codigo];
+    if (sala) {
+      const token = sala.tokens?.[socket.id] || socket.token;
+      if (sala.game && token) {
+        // Partida en curso → guardar el lugar y dar tiempo para reconectar
+        sala.desconectados = sala.desconectados || {};
+        sala.desconectados[token] = true;
+        io.to(codigo).emit('jugadorDesconectado', { id: socket.id, nombre: sala.nombres[socket.id], reconectando: true });
+        sala.timeouts = sala.timeouts || {};
+        clearTimeout(sala.timeouts[token]);
+        sala.timeouts[token] = setTimeout(() => removerJugadorDefinitivo(codigo, token), GRACE_MS);
+      } else {
+        // En el lobby (o sin token) → quitar de inmediato
+        io.to(codigo).emit('jugadorDesconectado', { id: socket.id, nombre: sala.nombres[socket.id] });
+        sala.jugadores = sala.jugadores.filter(id => id !== socket.id);
+        delete sala.nombres[socket.id];
+        if (token && sala.slots) delete sala.slots[token];
+        if (sala.tokens) delete sala.tokens[socket.id];
+        if (sala.jugadores.length === 0) delete salas[codigo];
+        else {
+          const jugadoresInfo = sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] }));
+          io.to(codigo).emit('jugadorUnido', { jugadores: jugadoresInfo });
+        }
+      }
     }
     console.log('desconectado:', socket.id);
   });

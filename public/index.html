@@ -36,6 +36,7 @@ body {
 #screen-lobby {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 24px; padding: 40px 20px;
+  background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.5)), url("/lobby.png") center / cover no-repeat;
 }
 #screen-game { display: none; flex-direction: column; height: 100vh; }
 
@@ -49,19 +50,64 @@ h1 {
 .subtitle { color: rgba(245,240,232,0.5); font-size: 0.8rem; letter-spacing: 0.15em; }
 
 /* ── Lobby ── */
+/* ── Caja de lobby: placa de madera con esquineras doradas (CSS puro) ── */
 .lobby-box {
-  background: rgba(0,0,0,0.35);
-  border: 1px solid rgba(201,168,76,0.3);
-  border-radius: 16px;
-  padding: 32px;
-  width: 100%; max-width: 420px;
+  position: relative;
+  width: 100%; max-width: 440px;
+  padding: 30px 32px;
   display: flex; flex-direction: column; gap: 16px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0.22)),
+    url("/madera.png") center / cover no-repeat,
+    linear-gradient(135deg, #5b3b23, #3a2413);
+  border: 3px solid #7a5026;
+  box-shadow:
+    inset 0 0 0 2px rgba(201,168,76,0.55),
+    inset 0 3px 10px rgba(0,0,0,0.5),
+    0 14px 34px rgba(0,0,0,0.6);
 }
+.lobby-box > * { position: relative; z-index: 1; }
 .lobby-box h2 {
   font-family: 'Playfair Display', serif;
-  font-size: 1.2rem; color: var(--gold2);
+  font-size: 1.3rem; color: var(--gold2);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
   margin-bottom: 4px;
 }
+
+/* Campo de texto del lobby: hundido con borde dorado */
+#screen-lobby input {
+  background: rgba(0,0,0,0.45);
+  border: 2px solid rgba(201,168,76,0.6);
+  border-radius: 11px;
+  box-shadow: inset 0 2px 7px rgba(0,0,0,0.65);
+  color: var(--cream);
+}
+#screen-lobby input:focus { border-color: var(--gold2); }
+
+/* Botones del lobby: lingote dorado glossy con remaches a los lados */
+#screen-lobby .btn:not(.btn-sm) {
+  position: relative;
+  color: #3a2a0e; font-weight: 700; letter-spacing: 0.1em;
+  background: linear-gradient(180deg, #f7e6a6 0%, #e8c96d 46%, #b8893a 54%, #dcb863 100%);
+  border: 1px solid #8a6a2a;
+  border-radius: 999px;
+  padding: 14px 30px;
+  margin: 2px 16px;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), inset 0 -3px 5px rgba(0,0,0,0.25), 0 4px 10px rgba(0,0,0,0.45);
+}
+#screen-lobby .btn:not(.btn-sm):hover { filter: brightness(1.06); transform: translateY(-1px); opacity: 1; }
+#screen-lobby .btn:not(.btn-sm)::before,
+#screen-lobby .btn:not(.btn-sm)::after {
+  content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 30px; border-radius: 6px;
+  background: linear-gradient(135deg, #f4e09a, #8a5a2b);
+  border: 1px solid #6b4a1e;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -2px 3px rgba(0,0,0,0.3);
+}
+#screen-lobby .btn:not(.btn-sm)::before { left: -12px; }
+#screen-lobby .btn:not(.btn-sm)::after { right: -12px; }
 input {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(201,168,76,0.4);
@@ -94,6 +140,25 @@ select:focus { border-color: var(--gold); }
 }
 .lang-btn:hover { color: var(--cream); }
 .lang-btn.activo { background: var(--gold); color: var(--dark); border-color: var(--gold); font-weight: 500; }
+/* Overlay de reconexión */
+#overlay-reconexion {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.78);
+  display: none; align-items: center; justify-content: center;
+}
+#overlay-reconexion.visible { display: flex; }
+.recon-box {
+  display: flex; align-items: center; gap: 14px;
+  background: #0d1f16; border: 1px solid rgba(201,168,76,0.45);
+  border-radius: 14px; padding: 20px 28px;
+  color: var(--cream); font-size: 0.95rem;
+}
+.recon-spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid rgba(201,168,76,0.3); border-top-color: var(--gold);
+  animation: recon-spin 0.8s linear infinite;
+}
+@keyframes recon-spin { to { transform: rotate(360deg); } }
 .btn {
   background: linear-gradient(135deg, var(--gold), #a0762e);
   border: none; border-radius: 8px;
@@ -234,8 +299,8 @@ select:focus { border-color: var(--gold); }
 
 .carta-dorso {
   width: 22px; height: 32px; border-radius: 3px;
-  background: linear-gradient(135deg, #1a3a8c, #0d2460);
-  border: 1px solid rgba(255,255,255,0.2);
+  background: url("/mazo.png") center / cover no-repeat, linear-gradient(135deg, #1a3a8c, #0d2460);
+  border: 1px solid rgba(201,168,76,0.45);
   display: inline-block; flex-shrink: 0;
 }
 
@@ -253,15 +318,11 @@ select:focus { border-color: var(--gold); }
   position: relative;
 }
 #btn-mazo {
-  background: linear-gradient(135deg, #1a3a8c, #0d2460);
-  border: 2px solid rgba(255,255,255,0.25);
+  background: url("/mazo.png") center / cover no-repeat, linear-gradient(135deg, #1a3a8c, #0d2460);
+  border: 2px solid rgba(201,168,76,0.55);
   box-shadow: 2px 2px 0 rgba(0,0,0,0.3), 4px 4px 0 rgba(0,0,0,0.2), 0 6px 18px rgba(0,0,0,0.5);
 }
 #btn-mazo:hover { transform: translateY(-3px); box-shadow: 2px 2px 0 rgba(0,0,0,0.3), 4px 4px 0 rgba(0,0,0,0.2), 0 10px 26px rgba(0,0,0,0.6); }
-#btn-mazo::after {
-  content: '🂠'; font-size: 2rem; position: absolute;
-  top: 50%; left: 50%; transform: translate(-50%,-50%); color: rgba(255,255,255,0.85);
-}
 .mazo-count {
   font-size: 0.7rem; color: rgba(245,240,232,0.6);
   text-align: center; margin-top: 6px;
@@ -671,11 +732,33 @@ select:focus { border-color: var(--gold); }
   <button class="btn" data-i18n="nuevaPartida" onclick="location.reload()">Nueva partida</button>
 </div>
 
+<!-- ── OVERLAY RECONEXIÓN ── -->
+<div id="overlay-reconexion">
+  <div class="recon-box">
+    <div class="recon-spinner"></div>
+    <span data-i18n="reconectando">Conexión perdida. Reintentando...</span>
+  </div>
+</div>
+
 <!-- ── TOAST ── -->
 <div id="toast"></div>
 
 <script>
-const socket = io();
+// Socket con reconexión automática (reintentos infinitos ante caídas de red)
+const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 800, reconnectionDelayMax: 4000 });
+
+// Token persistente del jugador → permite reintegrarse a la misma partida tras una caída
+let MI_TOKEN = '';
+try { MI_TOKEN = localStorage.getItem('carioca_token') || ''; } catch (e) {}
+if (!MI_TOKEN) {
+  MI_TOKEN = 'p' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { localStorage.setItem('carioca_token', MI_TOKEN); } catch (e) {}
+}
+let huboConexion = false;
+let partidaGuardada = null;
+try { partidaGuardada = JSON.parse(localStorage.getItem('carioca_partida') || 'null'); } catch (e) {}
+function guardarPartida() { try { localStorage.setItem('carioca_partida', JSON.stringify({ codigo: salaActual, nombre: miNombre })); } catch (e) {} }
+function limpiarPartidaGuardada() { try { localStorage.removeItem('carioca_partida'); } catch (e) {} partidaGuardada = null; }
 
 // Estado local
 let miId = null;
@@ -713,6 +796,7 @@ const I18N = {
     noTurno: 'No es tu turno', selecciona1Pegar: 'Selecciona 1 carta para pegar', elegirExtremo: 'Toca el lado IZQUIERDO o DERECHO del combo para elegir dónde pegar',
     selecciona1: 'Selecciona 1 carta primero', yaBajaste: 'Ya bajaste tu etapa en esta ronda', minJugadores: 'Se necesitan al menos 2 jugadores',
     rondaFin: '🏆 Ronda {r} terminada. ¡Ganó {n}!', comodin: 'el comodín',
+    reconectando: 'Conexión perdida. Reintentando...', reconecto: '🔌 {n} reconectó', salio: '{n} salió de la partida', seDescReconect: '{n} se desconectó (reconectando...)',
   },
   en: {
     subtitulo: 'ONLINE CARD GAME', entrar: 'Join the game', tuNombre: 'Your name',
@@ -735,6 +819,7 @@ const I18N = {
     noTurno: "It's not your turn", selecciona1Pegar: 'Select 1 card to add', elegirExtremo: 'Tap the LEFT or RIGHT side of the meld to choose where to add',
     selecciona1: 'Select 1 card first', yaBajaste: 'You already laid down this round', minJugadores: 'At least 2 players are required',
     rondaFin: '🏆 Round {r} over. {n} won!', comodin: 'the wild card',
+    reconectando: 'Connection lost. Reconnecting...', reconecto: '🔌 {n} reconnected', salio: '{n} left the game', seDescReconect: '{n} disconnected (reconnecting...)',
   },
 };
 function t(k, p) {
@@ -769,13 +854,13 @@ function mostrarOpciones() {
 }
 
 function crearSala() {
-  socket.emit('crearSala', { nombre: miNombre });
+  socket.emit('crearSala', { nombre: miNombre, token: MI_TOKEN });
 }
 
 function unirSala() {
   const codigo = document.getElementById('input-codigo').value.trim().toUpperCase();
   if (!codigo) return toast(t('escribeCodigo'));
-  socket.emit('unirSala', { codigo, nombre: miNombre });
+  socket.emit('unirSala', { codigo, nombre: miNombre, token: MI_TOKEN });
 }
 
 function iniciarJuego() {
@@ -792,6 +877,41 @@ function onModoChange() {
 function copiarCodigo() {
   navigator.clipboard.writeText(salaActual).then(() => toast(t('codigoCopiado', { c: salaActual })));
 }
+
+// ── Conexión / reconexión ─────────────────────────────────────────────────────
+socket.on('connect', () => {
+  miId = socket.id; // el id cambia en cada reconexión
+  ocultarReconexion();
+  if (salaActual) {
+    // Reconexión dentro de la sesión (caída de red sin recargar)
+    socket.emit('reconectar', { codigo: salaActual, token: MI_TOKEN });
+  } else if (!huboConexion && partidaGuardada && partidaGuardada.codigo) {
+    // Reintegrarse tras recargar la página
+    salaActual = partidaGuardada.codigo;
+    miNombre = partidaGuardada.nombre || miNombre;
+    socket.emit('reconectar', { codigo: partidaGuardada.codigo, token: MI_TOKEN });
+  }
+  huboConexion = true;
+});
+
+socket.on('disconnect', () => { if (salaActual) mostrarReconexion(); });
+
+socket.on('reconexionFallida', () => {
+  limpiarPartidaGuardada();
+  salaActual = '';
+  ocultarReconexion();
+  // Si estábamos en juego, volver al lobby
+  document.getElementById('screen-game').style.display = 'none';
+  document.getElementById('screen-lobby').style.display = 'flex';
+});
+
+socket.on('jugadorReconectado', ({ nombre, jugadores }) => {
+  ocultarReconexion();
+  if (jugadores) renderJugadoresLobby(jugadores);
+  toast(t('reconecto', { n: nombre }));
+});
+
+socket.on('jugadorSalio', ({ nombre }) => toast(t('salio', { n: nombre })));
 
 socket.on('salaCreada', ({ codigo, jugadores }) => {
   miId = socket.id;
@@ -842,6 +962,7 @@ socket.on('juegoIniciado', () => {
   document.getElementById('screen-lobby').style.display = 'none';
   document.getElementById('screen-game').style.display = 'flex';
   document.getElementById('screen-game').style.flexDirection = 'column';
+  guardarPartida(); // recordar la partida para reintegrarse si se cae la conexión
 });
 
 socket.on('estado', (e) => {
@@ -863,11 +984,14 @@ socket.on('finJuego', ({ ganador, nombre, puntos }) => {
   document.getElementById('fin-tabla').innerHTML =
     rows.map(r => `<div class="tabla-puntos-row"><span>${r.nombre}</span><span>${r.pts} ${t('pts')}</span></div>`).join('');
   document.getElementById('overlay-fin').classList.add('visible');
+  limpiarPartidaGuardada(); // la partida terminó
 });
 
 socket.on('error', (msg) => toast('⚠ ' + msg));
 
-socket.on('jugadorDesconectado', ({ nombre }) => toast(t('seDesconecto', { n: nombre })));
+socket.on('jugadorDesconectado', ({ nombre, reconectando }) => {
+  toast(reconectando ? t('seDescReconect', { n: nombre }) : t('seDesconecto', { n: nombre }));
+});
 
 // ── Helpers de mesa ─────────────────────────────────────────────────────────
 const AVATARES = ['🦊','🐼','🐧','🐸','🦉','🐙','🐳','🦁','🐯','🐵','🐨','🦄'];
@@ -1272,9 +1396,9 @@ function renderModalCombos() {
       cartasEl.appendChild(c);
     });
 
-    // Botones: cartas de mi mano no usadas
+    // Botones: cartas de mi mano no usadas, EN EL MISMO ORDEN que el jugador las acomodó
     const usadas = combosModal.flatMap(c => c.cartas.map(x => x.id));
-    const disponibles = (estado?.miMano || []).filter(c => !usadas.includes(c.id));
+    const disponibles = manoOrdenada().filter(c => !usadas.includes(c.id));
     const accs = div.querySelector('.combo-editor-acciones');
     const cartasDisp = document.createElement('div');
     cartasDisp.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;';
@@ -1307,6 +1431,10 @@ function confirmarBajada() {
   socket.emit('bajarEtapa', { combinaciones });
   cerrarModal();
 }
+
+// ── Overlay de reconexión ─────────────────────────────────────────────────────
+function mostrarReconexion() { document.getElementById('overlay-reconexion').classList.add('visible'); }
+function ocultarReconexion() { document.getElementById('overlay-reconexion').classList.remove('visible'); }
 
 // ── Zoom de la mano ───────────────────────────────────────────────────────────
 function toggleZoomMano() {
