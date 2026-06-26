@@ -15,19 +15,17 @@ const VALORES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const COMODIN = '🃏';
 
 const ETAPAS = [
-  { desc: '2 tríos',                   partes: ['trio','trio'] },
-  { desc: '1 trío + 1 escalera',       partes: ['trio','escalera'] },
-  { desc: '2 escaleras',               partes: ['escalera','escalera'] },
-  { desc: '3 tríos',                   partes: ['trio','trio','trio'] },
-  { desc: '2 tríos + 1 escalera',      partes: ['trio','trio','escalera'] },
-  { desc: '1 trío + 2 escaleras',      partes: ['trio','escalera','escalera'] },
-  { desc: '3 escaleras',               partes: ['escalera','escalera','escalera'] },
-  { desc: '4 tríos',                   partes: ['trio','trio','trio','trio'] },
-  { desc: '3 tríos + 1 escalera',      partes: ['trio','trio','trio','escalera'] },
-  { desc: '2 tríos + 2 escaleras',     partes: ['trio','trio','escalera','escalera'] },
-  { desc: '1 trío + 3 escaleras',      partes: ['trio','escalera','escalera','escalera'] },
-  { desc: '4 escaleras',               partes: ['escalera','escalera','escalera','escalera'] },
+  { desc: '2 tríos',                partes: ['trio','trio'] },                 // 1) 6 cartas
+  { desc: '1 trío + 1 escalera',    partes: ['trio','escalera'] },             // 2) 7
+  { desc: '2 escaleras',            partes: ['escalera','escalera'] },         // 3) 8
+  { desc: '3 tríos',                partes: ['trio','trio','trio'] },          // 4) 9
+  { desc: '2 tríos + 1 escalera',   partes: ['trio','trio','escalera'] },      // 5) 10
+  { desc: '1 trío + 2 escaleras',   partes: ['trio','escalera','escalera'] },  // 6) 11
+  { desc: '4 tríos',                partes: ['trio','trio','trio','trio'] },   // 7) 12
+  { desc: 'Escala real (color)',    partes: ['real'] },                        // 8) 13 mismo palo A→K
+  { desc: 'Escala sucia',           partes: ['sucia'] },                       // 9) 13 cualquier palo A→K
 ];
+const TOTAL_ETAPAS = ETAPAS.length; // 9
 
 // ── Helpers de cartas ─────────────────────────────────────────────────────────
 let _cartaSeq = 0; // contador global → cada carta tiene un id ÚNICO (sin colisiones)
@@ -100,8 +98,24 @@ function validarEscalera(cartas) {
   return span <= cartas.length;
 }
 
+// Escala sucia: 13 cartas, una de cada valor A→K (cualquier palo), comodines completan
+function validarSucia(cartas) {
+  if (cartas.length !== 13) return false;
+  const vistos = new Set();
+  for (const c of cartas) {
+    if (esComodin(c)) continue;
+    const r = VALORES.indexOf(c.val);
+    if (r < 0 || vistos.has(r)) return false; // valor repetido → inválida
+    vistos.add(r);
+  }
+  return true; // 13 cartas con valores no repetidos → los comodines tapan los faltantes
+}
+
 function validarCombinacion(tipo, cartas) {
-  return tipo === 'trio' ? validarTrio(cartas) : validarEscalera(cartas);
+  if (tipo === 'trio') return validarTrio(cartas);
+  if (tipo === 'sucia') return validarSucia(cartas);
+  if (tipo === 'real') return cartas.length === 13 && validarEscalera(cartas); // 13 mismo palo = A→K
+  return validarEscalera(cartas);
 }
 
 // Ordena una escalera (cíclica) para mostrar: empieza tras el mayor hueco y avanza,
@@ -136,9 +150,9 @@ function ordenarEscalera(cartas) {
   return out;
 }
 
-// Mantiene el orden correcto para mostrar (las escaleras de izquierda a derecha)
+// Mantiene el orden correcto para mostrar (escaleras/reales/sucias de menor a mayor)
 function ordenarCombo(tipo, cartas) {
-  return tipo === 'escalera' ? ordenarEscalera(cartas) : cartas;
+  return tipo === 'trio' ? cartas : ordenarEscalera(cartas);
 }
 
 // Extiende una escalera (ya ordenada) por un extremo. 'izquierda' = true → extremo bajo.
@@ -179,7 +193,7 @@ function nuevaPartida(jugadores, opciones = {}) {
   // Modo libre: una sola partida de la etapa elegida; si no, partida completa (12 etapas)
   const modoLibre = opciones.modo === 'libre';
   const etapaInicial = modoLibre
-    ? Math.max(0, Math.min(11, parseInt(opciones.etapaInicial, 10) || 0))
+    ? Math.max(0, Math.min(ETAPAS.length - 1, parseInt(opciones.etapaInicial, 10) || 0))
     : 0;
   return {
     jugadores,
@@ -265,8 +279,8 @@ function verificarRondaTerminada(codigoSala) {
     // La etapa que se acaba de jugar (todos juegan la misma etapa en cada ronda)
     const etapaJugada = g.etapas[ganador];
 
-    // Modo libre = una sola etapa → o partida completa terminó (etapa 12) → fin del juego
-    if (g.modoLibre || etapaJugada >= 11) {
+    // Modo libre = una sola etapa → o partida completa terminó (última etapa) → fin del juego
+    if (g.modoLibre || etapaJugada >= TOTAL_ETAPAS - 1) {
       // Gana quien tenga MENOS puntos acumulados
       const ranking = [...g.jugadores].sort((a, b) => g.puntos[a] - g.puntos[b]);
       const campeon = ranking[0];
@@ -529,6 +543,25 @@ io.on('connection', socket => {
 
     if (verificarRondaTerminada(codigo)) return;
     emitirEstado(codigo);
+  });
+
+  socket.on('abandonarPartida', () => {
+    const codigo = socket.salaActual;
+    const sala = codigo && salas[codigo];
+    if (!sala) return;
+    const token = sala.tokens?.[socket.id] || socket.token;
+    socket.leave(codigo);
+    socket.salaActual = null;
+    if (token && sala.timeouts && sala.timeouts[token]) { clearTimeout(sala.timeouts[token]); delete sala.timeouts[token]; }
+    if (token && sala.slots && sala.slots[token]) {
+      removerJugadorDefinitivo(codigo, token);
+    } else {
+      // estaba en el lobby sin token
+      sala.jugadores = sala.jugadores.filter(id => id !== socket.id);
+      delete sala.nombres[socket.id];
+      if (sala.jugadores.length === 0) delete salas[codigo];
+      else io.to(codigo).emit('jugadorUnido', { jugadores: sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] })) });
+    }
   });
 
   socket.on('disconnect', () => {

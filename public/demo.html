@@ -131,6 +131,40 @@ input::placeholder { color: rgba(245,240,232,0.3); }
 }
 .lang-btn:hover { color: var(--cream); }
 .lang-btn.activo { background: var(--gold); color: var(--dark); border-color: var(--gold); font-weight: 500; }
+/* Botón salir (header) */
+.btn-salir {
+  pointer-events: auto;
+  background: rgba(120,30,25,0.55); border: 1px solid rgba(192,57,43,0.6);
+  color: #ffd9d2; font-family: 'DM Mono', monospace; font-size: 0.72rem;
+  padding: 5px 11px; border-radius: 7px; cursor: pointer; transition: background 0.15s;
+}
+.btn-salir:hover { background: rgba(160,40,33,0.8); }
+/* Aviso de turno (centro de la pantalla) */
+#aviso-turno {
+  position: fixed; top: 42%; left: 50%; transform: translate(-50%,-50%) scale(0.8);
+  z-index: 450; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, rgba(13,31,22,0.95), rgba(10,22,15,0.95));
+  border: 2px solid var(--gold); border-radius: 16px;
+  padding: 18px 40px; color: var(--gold2);
+  font-family: 'Playfair Display', serif; font-size: 1.8rem; font-weight: 900;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.7); box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 30px rgba(201,168,76,0.35);
+}
+#aviso-turno.show { animation: aviso-turno-anim 1.6s ease forwards; }
+@keyframes aviso-turno-anim {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(0.7); }
+  18% { opacity: 1; transform: translate(-50%,-50%) scale(1.05); }
+  30% { transform: translate(-50%,-50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(0.95); }
+}
+/* Carta voladora (animación de robar/tirar/pegar) */
+.carta-volando { will-change: transform, opacity; }
+.carta-volando .carta { width: 100%; height: 100%; margin: 0; box-shadow: 0 10px 26px rgba(0,0,0,0.6); }
+.carta-dorso-fly {
+  width: 100%; height: 100%; border-radius: var(--radius);
+  background: url("/mazo.png") center / cover no-repeat, linear-gradient(135deg, #1a3a8c, #0d2460);
+  border: 1px solid rgba(201,168,76,0.5);
+}
 .btn {
   background: linear-gradient(135deg, var(--gold), #a0762e);
   border: none; border-radius: 8px;
@@ -438,10 +472,9 @@ input::placeholder { color: rgba(245,240,232,0.3); }
 .carta.comodin .carta-corner { color: var(--gold); font-size: 0.7rem; }
 .carta.roja .carta-val, .carta.roja .carta-palo { color: var(--red); }
 .carta.negra .carta-val, .carta.negra .carta-palo { color: #111; }
-.carta.comodin { background: linear-gradient(135deg, #2c3e50, #1a252f); }
-.carta.comodin .carta-palo { font-size: 3.4rem; line-height: 1; }
-.carta.comodin .carta-val { display: none; }
-.carta.comodin .carta-inner { width: 100%; height: 100%; justify-content: center; }
+/* Comodín = imagen del Joker llenando la carta (mismo tamaño/borde que las demás) */
+.carta.comodin { background: #fff url("/joker.png") center / cover no-repeat; }
+.carta.comodin .carta-inner, .carta.comodin .carta-corner { display: none; }
 
 /* ── Acciones ── */
 #zona-acciones {
@@ -616,6 +649,7 @@ input::placeholder { color: rgba(245,240,232,0.3); }
       </div>
       <div class="ronda-badge">Ronda <span id="hdr-ronda">1</span></div>
       <span id="hdr-turno-texto">—</span>
+      <button class="btn-salir" data-i18n="salir" onclick="abandonarPartida()">🚪 Salir</button>
     </div>
   </div>
 
@@ -654,7 +688,7 @@ input::placeholder { color: rgba(245,240,232,0.3); }
           <span class="turno-indicator" id="mi-turno-badge">—</span>
         </div>
         <div class="panel-puntaje">
-          <div class="etapa-display" id="mi-etapa-display">Etapa 1/12 · —</div>
+          <div class="etapa-display" id="mi-etapa-display">Etapa 1/9 · —</div>
           <div id="puntos-tabla"></div>
         </div>
       </div>
@@ -691,6 +725,9 @@ input::placeholder { color: rgba(245,240,232,0.3); }
   <button class="btn" data-i18n="nuevaPartida" onclick="location.reload()">Nueva partida</button>
 </div>
 
+<!-- ── AVISO DE TURNO (centro) ── -->
+<div id="aviso-turno"><span data-i18n="tuTurnoAviso">¡Es tu turno!</span></div>
+
 <!-- ── TOAST ── -->
 <div id="toast"></div>
 
@@ -711,6 +748,7 @@ let cartasSeleccionadas = [];
 let combosModal = []; // [{cartas:[]}]
 let modoAccion = null; // 'pegar'
 let ordenMano = []; // orden visual local de la mano (ids), persistente entre renders
+let eraMiTurno = false; // para avisar cuando empieza tu turno
 
 // ── i18n (ES / EN) ────────────────────────────────────────────────────────────
 let LANG = 'es';
@@ -731,7 +769,8 @@ const I18N = {
     bajarTitulo: 'Bajar etapa', confirmarBajada: '✓ Confirmar bajada', cancelar: 'Cancelar',
     cartasDeTuMano: 'Cartas de tu mano:', trioMin: 'Trío (mín. 3 del mismo valor)', escaleraMin: 'Escalera (mín. 4 seguidas del mismo palo)',
     nuevaPartida: 'Nueva partida', puntFinal: 'Puntuación final (menos es mejor)', ganaJuego: '🏆 {n} gana el juego!', pts: 'pts',
-    etapasDesc: ['2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos','2 tríos + 1 escalera','1 trío + 2 escaleras','3 escaleras','4 tríos','3 tríos + 1 escalera','2 tríos + 2 escaleras','1 trío + 3 escaleras','4 escaleras'],
+    etapasDesc: ['2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos','2 tríos + 1 escalera','1 trío + 2 escaleras','4 tríos','Escala real (color)','Escala sucia'],
+    real: 'ESCALA REAL', sucia: 'ESCALA SUCIA', realMin: 'Escala real: A→K, todas del mismo palo (13 cartas)', suciaMin: 'Escala sucia: A→K, cualquier palo (13 cartas)',
     escribeNombre: 'Escribe tu nombre', escribeCodigo: 'Escribe un código de sala', codigoCopiado: 'Código copiado: {c}',
     seDesconecto: '{n} se desconectó', noTurnoRobar: 'No es tu turno o debes robar primero', selecciona1Tirar: 'Selecciona exactamente 1 carta para tirar',
     noTurno: 'No es tu turno', selecciona1Pegar: 'Selecciona 1 carta para pegar', elegirExtremo: 'Toca el lado IZQUIERDO o DERECHO del combo para elegir dónde pegar',
@@ -740,6 +779,7 @@ const I18N = {
     robasteMazo: 'Robaste una carta del mazo', tomasteDescarte: 'Tomaste la carta del descarte', tiraste: 'Tiraste {c}',
     pegaste: '✓ Pegaste {c}{l}', noPegarIzq: '⚠ Esa carta no va a la izquierda', noPegarDer: '⚠ Esa carta no va a la derecha', noPegarAhi: '⚠ No se puede pegar ahí',
     ladoIzq: ' (izquierda)', ladoDer: ' (derecha)', demoBienvenida: '🎴 Partida de DEMO. ¡Prueba arrastrar, el zoom y pegar a combo!',
+    salir: '🚪 Salir', tuTurnoAviso: '¡Es tu turno!', confirmSalir: '¿Seguro que quieres abandonar la partida?',
   },
   en: {
     subtitulo: 'ONLINE CARD GAME', entrar: 'Join the game', tuNombre: 'Your name',
@@ -756,7 +796,8 @@ const I18N = {
     bajarTitulo: 'Lay down stage', confirmarBajada: '✓ Confirm', cancelar: 'Cancel',
     cartasDeTuMano: 'Cards from your hand:', trioMin: 'Set (min. 3 of the same value)', escaleraMin: 'Run (min. 4 in sequence, same suit)',
     nuevaPartida: 'New game', puntFinal: 'Final score (less is better)', ganaJuego: '🏆 {n} wins the game!', pts: 'pts',
-    etapasDesc: ['2 sets','1 set + 1 run','2 runs','3 sets','2 sets + 1 run','1 set + 2 runs','3 runs','4 sets','3 sets + 1 run','2 sets + 2 runs','1 set + 3 runs','4 runs'],
+    etapasDesc: ['2 sets','1 set + 1 run','2 runs','3 sets','2 sets + 1 run','1 set + 2 runs','4 sets','Royal run (flush)','Dirty run'],
+    real: 'ROYAL RUN', sucia: 'DIRTY RUN', realMin: 'Royal run: A→K, all the same suit (13 cards)', suciaMin: 'Dirty run: A→K, any suit (13 cards)',
     escribeNombre: 'Enter your name', escribeCodigo: 'Enter a room code', codigoCopiado: 'Code copied: {c}',
     seDesconecto: '{n} disconnected', noTurnoRobar: "It's not your turn or you must draw first", selecciona1Tirar: 'Select exactly 1 card to discard',
     noTurno: "It's not your turn", selecciona1Pegar: 'Select 1 card to add', elegirExtremo: 'Tap the LEFT or RIGHT side of the meld to choose where to add',
@@ -765,6 +806,7 @@ const I18N = {
     robasteMazo: 'You drew a card from the deck', tomasteDescarte: 'You took the discard', tiraste: 'You discarded {c}',
     pegaste: '✓ Added {c}{l}', noPegarIzq: "⚠ That card doesn't fit on the left", noPegarDer: "⚠ That card doesn't fit on the right", noPegarAhi: "⚠ Can't add there",
     ladoIzq: ' (left)', ladoDer: ' (right)', demoBienvenida: '🎴 DEMO game. Try dragging, the zoom and adding to a meld!',
+    salir: '🚪 Leave', tuTurnoAviso: 'Your turn!', confirmSalir: 'Are you sure you want to leave the game?',
   },
 };
 function t(k, p) {
@@ -902,13 +944,16 @@ function renderEstado() {
   const turnNombre = e.nombres[e.turno] || '—';
   document.getElementById('hdr-turno-texto').textContent =
     e.soyYo ? t('tuTurno') : t('turnoDe', { n: turnNombre });
+  // Aviso central cuando empieza TU turno
+  if (e.soyYo && !eraMiTurno) mostrarAvisoTurno();
+  eraMiTurno = !!e.soyYo;
 
   // Mi info
   const miEtapaIdx = e.etapas[miId] || 0;
   const ETAPAS_DESC = t('etapasDesc');
   document.getElementById('mi-nombre-display').textContent = miNombre || 'Tú';
   document.getElementById('mi-etapa-display').textContent =
-    t('etapa') + ' ' + (miEtapaIdx + 1) + '/12 · ' + (ETAPAS_DESC[miEtapaIdx] || '—');
+    t('etapa') + ' ' + (miEtapaIdx + 1) + '/9 · ' + (ETAPAS_DESC[miEtapaIdx] || '—');
 
   const badge = document.getElementById('mi-turno-badge');
   if (e.soyYo) {
@@ -948,9 +993,7 @@ function renderEstado() {
   const PARTES = [
     ['trio','trio'],['trio','escalera'],['escalera','escalera'],
     ['trio','trio','trio'],['trio','trio','escalera'],['trio','escalera','escalera'],
-    ['escalera','escalera','escalera'],['trio','trio','trio','trio'],
-    ['trio','trio','trio','escalera'],['trio','trio','escalera','escalera'],
-    ['trio','escalera','escalera','escalera'],['escalera','escalera','escalera','escalera']
+    ['trio','trio','trio','trio'],['real'],['sucia']
   ];
   function construirCombos(id) {
     const combos = e.bajadasEtapa[id];
@@ -964,7 +1007,7 @@ function renderEstado() {
       const tipo = tipos[ci] || '';
       const area = document.createElement('div');
       area.className = 'combo-area';
-      area.innerHTML = `<div class="combo-tipo">${tipo === 'trio' ? t('trio') : t('escalera')}</div>` +
+      area.innerHTML = `<div class="combo-tipo">${t(tipo) || t('escalera')}</div>` +
         combo.map(c => cartaHTML(c, false)).join('');
       area.onclick = (ev) => pegarEnCombo(id, ci, ev);
       wrap.appendChild(area);
@@ -1027,14 +1070,18 @@ function renderEstado() {
 function manoOrdenada() {
   const mano = estado?.miMano || [];
   const byId = new Map(mano.map(c => [c.id, c]));
-  const ordered = ordenMano.filter(id => byId.has(id)).map(id => byId.get(id));
-  const conocidas = new Set(ordered.map(c => c.id));
-  for (const c of mano) if (!conocidas.has(c.id)) ordered.push(c);
+  const seen = new Set();
+  const ordered = [];
+  for (const id of ordenMano) {
+    if (byId.has(id) && !seen.has(id)) { seen.add(id); ordered.push(byId.get(id)); }
+  }
+  for (const c of mano) if (!seen.has(c.id)) { seen.add(c.id); ordered.push(c); }
   ordenMano = ordered.map(c => c.id);
   return ordered;
 }
 
 function renderMano(mano) {
+  if (drag) cancelarDrag(); // si llega un estado mientras arrastro, evita duplicar la carta
   const el = document.getElementById('mano-cartas');
   el.innerHTML = '';
   mano.forEach(carta => {
@@ -1099,9 +1146,21 @@ function onDragMove(ev) {
 
   // Mover el hueco (placeholder) entre las demás cartas
   const cont = document.getElementById('mano-cartas');
+  if (!cont.contains(drag.card)) { cancelarDrag(); return; } // la mano se re-renderizó: abortar
   const ref = cartaDespuesDe(cont, ev.clientX, ev.clientY);
   if (ref == null) cont.appendChild(drag.card);
   else if (ref !== drag.card) cont.insertBefore(drag.card, ref);
+}
+
+// Cancela un arrastre en curso sin duplicar nada (limpia fantasma y listeners)
+function cancelarDrag() {
+  document.removeEventListener('pointermove', onDragMove);
+  document.removeEventListener('pointerup', onDragEnd);
+  document.removeEventListener('pointercancel', onDragEnd);
+  if (drag && drag.ghost) drag.ghost.remove();
+  const cont = document.getElementById('mano-cartas');
+  if (cont) cont.classList.remove('arrastrando');
+  drag = null;
 }
 
 function comenzarDrag(ev) {
@@ -1191,20 +1250,63 @@ function seleccionarCarta(id) {
   });
 }
 
+// ── Abandonar / aviso de turno / animaciones ──────────────────────────────────
+function abandonarPartida() {
+  if (!confirm(t('confirmSalir'))) return;
+  socket.emit('abandonarPartida');
+  location.reload();
+}
+function mostrarAvisoTurno() {
+  const el = document.getElementById('aviso-turno');
+  if (!el) return;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+}
+function volarCarta(src, dst, inner, ms) {
+  if (!src || !dst) return;
+  ms = ms || 430;
+  const fly = document.createElement('div');
+  fly.className = 'carta-volando';
+  fly.style.cssText = `position:fixed; left:${src.left}px; top:${src.top}px; width:${src.width}px; height:${src.height}px;
+    z-index:900; pointer-events:none; transition: transform ${ms}ms cubic-bezier(.2,.7,.25,1), opacity ${ms}ms ease;`;
+  fly.innerHTML = inner;
+  document.body.appendChild(fly);
+  const dx = (dst.left + dst.width / 2) - (src.left + src.width / 2);
+  const dy = (dst.top + dst.height / 2) - (src.top + src.height / 2);
+  const sc = Math.max(0.4, Math.min(1.4, dst.width / src.width || 1));
+  requestAnimationFrame(() => { fly.style.transform = `translate(${dx}px, ${dy}px) scale(${sc})`; fly.style.opacity = '0.85'; });
+  setTimeout(() => fly.remove(), ms + 60);
+}
+function rectDe(sel) { const el = typeof sel === 'string' ? document.getElementById(sel) : sel; return el ? el.getBoundingClientRect() : null; }
+function rectMano() { const m = rectDe('mano-cartas'); if (!m) return null; return { left: m.left + m.width / 2 - 25, top: m.top, width: 50, height: 72 }; }
+function animarRobo(origen) {
+  const src = rectDe(origen === 'descarte' ? 'btn-descarte' : 'btn-mazo');
+  let inner = '<div class="carta-dorso-fly"></div>';
+  if (origen === 'descarte' && estado?.descarte?.length) inner = cartaHTML(estado.descarte[estado.descarte.length - 1], false);
+  volarCarta(src, rectMano(), inner);
+}
+function animarTirar(cartaEl, carta) { volarCarta(cartaEl ? cartaEl.getBoundingClientRect() : rectMano(), rectDe('btn-descarte'), cartaHTML(carta, false)); }
+function animarPegar(cartaEl, comboEl, carta) { volarCarta(cartaEl ? cartaEl.getBoundingClientRect() : rectMano(), comboEl ? comboEl.getBoundingClientRect() : rectDe('btn-descarte'), cartaHTML(carta, false)); }
+
 function robarMazo() {
   if (!estado?.soyYo || estado?.fase !== 'robar') return;
+  animarRobo('mazo');
   socket.emit('robarMazo');
 }
 
 function robarDescarte() {
   if (!estado?.soyYo || estado?.fase !== 'robar') return;
+  animarRobo('descarte');
   socket.emit('robarDescarte');
 }
 
 function tirarSeleccionada() {
   if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurnoRobar'));
   if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1Tirar'));
-  socket.emit('tirarCarta', { cartaId: cartasSeleccionadas[0] });
+  const cartaId = cartasSeleccionadas[0];
+  const cartaEl = document.querySelector(`#mano-cartas .carta[data-id="${cartaId}"]`);
+  const carta = (estado.miMano || []).find(c => c.id === cartaId);
+  if (carta) animarTirar(cartaEl, carta);
+  socket.emit('tirarCarta', { cartaId });
   cartasSeleccionadas = [];
 }
 
@@ -1218,11 +1320,15 @@ function pegarSeleccionada() {
 function pegarEnCombo(jugadorId, comboIdx, ev) {
   if (modoAccion !== 'pegar') return;
   if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1'));
+  const cartaId = cartasSeleccionadas[0];
   // El lado donde se hace clic decide el extremo: izquierda = posición 0, derecha = final
   const rect = ev.currentTarget.getBoundingClientRect();
   const izquierda = (ev.clientX - rect.left) < rect.width / 2;
+  const cartaEl = document.querySelector(`#mano-cartas .carta[data-id="${cartaId}"]`);
+  const carta = (estado.miMano || []).find(c => c.id === cartaId);
+  if (carta) animarPegar(cartaEl, ev.currentTarget, carta);
   socket.emit('pegarCarta', {
-    cartaId: cartasSeleccionadas[0],
+    cartaId,
     jugadorId, comboIdx,
     posicion: izquierda ? 0 : estado.bajadasEtapa[jugadorId][comboIdx].length,
   });
@@ -1234,14 +1340,7 @@ function pegarEnCombo(jugadorId, comboIdx, ev) {
 const ETAPAS_PARTES = [
   ['trio','trio'],['trio','escalera'],['escalera','escalera'],
   ['trio','trio','trio'],['trio','trio','escalera'],['trio','escalera','escalera'],
-  ['escalera','escalera','escalera'],['trio','trio','trio','trio'],
-  ['trio','trio','trio','escalera'],['trio','trio','escalera','escalera'],
-  ['trio','escalera','escalera','escalera'],['escalera','escalera','escalera','escalera']
-];
-const ETAPAS_DESC_ARR = [
-  '2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos',
-  '2 tríos + 1 escalera','1 trío + 2 escaleras','3 escaleras','4 tríos',
-  '3 tríos + 1 escalera','2 tríos + 2 escaleras','1 trío + 3 escaleras','4 escaleras'
+  ['trio','trio','trio','trio'],['real'],['sucia']
 ];
 
 function abrirModalBajada() {
@@ -1267,7 +1366,7 @@ function renderModalCombos() {
   combosModal.forEach((combo, ci) => {
     const div = document.createElement('div');
     div.className = 'combo-editor';
-    const tipoLabel = combo.tipo === 'trio' ? t('trioMin') : t('escaleraMin');
+    const tipoLabel = t(combo.tipo + 'Min') || t('escaleraMin');
     div.innerHTML = `<div class="combo-editor-titulo">${ci+1}. ${tipoLabel}</div>
       <div class="combo-editor-cartas" id="modal-combo-${ci}"></div>
       <div class="combo-editor-acciones">
@@ -1348,37 +1447,37 @@ function C(val, palo) { return { id: 'c' + (++_uid), val, palo }; }
 
 function nuevoEstadoDemo() {
   return {
-    ronda: 7,
+    ronda: 6,
     turno: 'yo',
     soyYo: true,
     fase: 'jugar',
     jugadores: ['daniel', 'luna', 'pudding', 'yo'],
     nombres: { yo: 'Tú (demo)', daniel: 'daniel', luna: 'luna', pudding: 'pudding' },
-    etapas: { yo: 6, daniel: 6, luna: 6, pudding: 6 }, // Etapa 7 = 3 escaleras (casi terminando)
+    etapas: { yo: 5, daniel: 5, luna: 5, pudding: 5 }, // Etapa 6 = 1 trío + 2 escaleras
     puntos: { yo: 18, daniel: 34, luna: 27, pudding: 41 },
     mazoSize: 31,
     descarte: [ C('7', '♦') ],
     manosAjenas: { daniel: 2, luna: 1, pudding: 3 },
-    // Todos bajaron sus 3 escaleras
+    // Todos bajaron 1 trío + 2 escaleras
     bajadasEtapa: {
       daniel: [
+        [ C('10', '♦'), C('10', '♥'), C('10', '♠') ],
         [ C('3', '♠'), C('4', '♠'), C('5', '♠'), C('6', '♠') ],
         [ C('7', '♥'), C('8', '♥'), C('9', '♥'), C('10', '♥') ],
-        [ C('9', '♦'), C('10', '♦'), C('J', '♦'), C('Q', '♦') ],
       ],
       luna: [
+        [ C('K', '♣'), C('K', '♠'), C('K', '♦') ],
         [ C('4', '♣'), C('5', '♣'), C('6', '♣'), C('7', '♣') ],
-        [ C('2', '♦'), C('3', '♦'), C('4', '♦'), C('5', '♦') ],
         [ C('9', '♥'), C('10', '♥'), C('J', '♥'), C('Q', '♥') ],
       ],
       pudding: [
+        [ C('Q', '♠'), C('Q', '♥'), C('Q', '♦') ],
         [ C('3', '♥'), C('4', '♥'), C('5', '♥'), C('6', '♥') ],
-        [ C('8', '♠'), C('9', '♠'), C('10', '♠'), C('J', '♠') ],
         [ C('6', '♣'), C('7', '♣'), C('8', '♣'), C('9', '♣') ],
       ],
       yo: [
-        [ C('2', '♣'), C('3', '♣'), C('4', '♣'), C('5', '♣') ], // pega la A♣ a la IZQUIERDA → A 2 3 4 5
-        [ C('9', '♠'), C('10', '♠'), C('J', '♠'), C('Q', '♠') ], // pega el comodín a izquierda (8) o derecha (K)
+        [ C('A', '♠'), C('A', '♥'), C('A', '♦') ],                         // pega la A♣ aquí → 4 ases
+        [ C('2', '♣'), C('3', '♣'), C('4', '♣'), C('5', '♣') ],            // pega el comodín a izq (A) o der (6)
         [ C('Q', '♥'), C('K', '♥'), C('A', '♥'), C('2', '♥'), C('3', '♥') ], // escalera circular (As puente)
       ],
     },
