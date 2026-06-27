@@ -649,6 +649,64 @@ select:focus { border-color: var(--gold); }
   .seat-nombre { font-size: 0.72rem; }
   .seat-stats { font-size: 0.6rem; }
 }
+
+/* ════ CELULAR EN HORIZONTAL (pantalla baja) — no afecta a escritorio ════ */
+@media (orientation: landscape) and (max-height: 560px) {
+  :root { --card-w: 38px; --card-h: 55px; --radius: 5px; }
+  .carta-val { font-size: 0.72rem; }
+  .carta-palo { font-size: 0.95rem; }
+  .carta-corner { font-size: 0.48rem; top: 2px; left: 3px; }
+
+  /* Header compacto */
+  #game-header { padding: 4px 10px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+  #game-header h1 { font-size: 0.95rem; }
+  .header-info { gap: 7px; font-size: 0.6rem; }
+  .ronda-badge { padding: 2px 7px; font-size: 0.6rem; }
+  .lang-switch { gap: 2px; }
+  .lang-btn { padding: 2px 6px; font-size: 0.58rem; }
+  .btn-salir { padding: 3px 7px; font-size: 0.58rem; }
+
+  /* Mesa: aprovechar el alto */
+  #tablero { margin: 4% 2% 0; gap: 2px; padding: 2px 8px 86px; border-radius: 24px; }
+  .celda { gap: 4px; }
+  #zona-mazo-descarte { gap: 12px; }
+  .pila-label { font-size: 0.55rem; margin-bottom: 2px; }
+  .mazo-count { font-size: 0.55rem; margin-top: 2px; }
+
+  /* Asientos compactos */
+  .seat { max-width: 150px; padding: 4px 7px; gap: 3px; }
+  .seat-avatar { width: 22px; height: 22px; font-size: 0.85rem; }
+  .seat-nombre { font-size: 0.62rem; }
+  .seat-stats { font-size: 0.52rem; }
+  .seat-cartas { min-height: 18px; }
+  .carta-dorso { width: 13px; height: 19px; margin-left: -9px; }
+  .combo-area { padding: 3px 5px; min-height: 0; }
+  .combo-tipo { font-size: 0.5rem; }
+  .combo-area .carta + .carta { margin-left: -24px; }
+  .meld-group-combos { gap: 6px; }
+
+  /* Panel de puntaje: chico y en la esquina (estorba menos) */
+  .panel-puntaje { right: 6px; bottom: 5px; padding: 5px 9px; min-width: 0; border-radius: 10px; }
+  .panel-puntaje .etapa-display { font-size: 0.56rem; margin-bottom: 4px; padding-bottom: 4px; }
+  .punto-row { grid-template-columns: 1fr 15px auto; gap: 7px; font-size: 0.64rem; }
+  .punto-icono { font-size: 0.72rem; }
+  .punto-val { font-weight: 700; }
+
+  /* Mano y controles (capa inferior) compactos */
+  #zona-jugador { padding: 2px 8px 5px; }
+  .mano-hint { display: none; }
+  .jugador-header { margin-bottom: 3px; }
+  .jugador-nombre-display { font-size: 0.66rem; }
+  .turno-indicator { font-size: 0.56rem; padding: 1px 6px; }
+  #mano-cartas { margin-bottom: 4px; }
+  #mano-cartas .carta { width: 38px; height: 55px; }
+  #mano-cartas:hover, #zona-jugador.zoom #mano-cartas { transform: scale(1.7); }
+  #zona-acciones { gap: 5px; }
+  #zona-acciones .btn { padding: 5px 9px; font-size: 0.6rem; letter-spacing: 0.03em; }
+
+  /* Aviso de turno más pequeño */
+  #aviso-turno { font-size: 1.1rem; padding: 9px 22px; top: 38%; border-radius: 12px; }
+}
 </style>
 </head>
 <body>
