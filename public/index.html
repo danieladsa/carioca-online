@@ -958,6 +958,21 @@ socket.on('jugadorReconectado', ({ nombre, jugadores }) => {
 
 socket.on('jugadorSalio', ({ nombre }) => toast(t('salio', { n: nombre })));
 
+// Animaciones que generan los OTROS jugadores (robar / tirar / pegar)
+socket.on('accionAnim', (a) => {
+  if (!a) return;
+  const seatRect = () => { const s = document.querySelector(`.seat[data-jugador="${a.jugadorId}"]`); return s ? s.getBoundingClientRect() : null; };
+  if (a.tipo === 'robar') {
+    volarCarta(rectDe(a.origen === 'descarte' ? 'btn-descarte' : 'btn-mazo'), seatRect(), '<div class="carta-dorso-fly"></div>');
+  } else if (a.tipo === 'tirar' && a.carta) {
+    volarCarta(seatRect(), rectDe('btn-descarte'), cartaHTML(a.carta, false));
+  } else if (a.tipo === 'pegar' && a.carta) {
+    const ownerSeat = document.querySelector(`.seat[data-jugador="${a.owner}"]`);
+    const dst = a.owner === miId ? rectDe('celda-mine') : (ownerSeat ? ownerSeat.getBoundingClientRect() : null);
+    volarCarta(seatRect(), dst || rectDe('btn-descarte'), cartaHTML(a.carta, false));
+  }
+});
+
 socket.on('salaCreada', ({ codigo, jugadores }) => {
   miId = socket.id;
   salaActual = codigo;
@@ -1147,6 +1162,7 @@ function renderEstado() {
       const activo = e.turno === id ? ' seat-activo' : '';
       const seat = document.createElement('div');
       seat.className = 'seat' + activo;
+      seat.dataset.jugador = id;
       seat.innerHTML = `
         <div class="seat-head">
           <div class="seat-avatar">${avatarDe(id)}</div>
@@ -1523,24 +1539,31 @@ function mostrarAvisoTurno() {
 function volarCarta(src, dst, inner, ms) {
   if (!src || !dst) return;
   ms = ms || 430;
+  const W = 50, H = 72; // tamaño FIJO de carta (no deformar, sin importar el origen)
+  const cx = src.left + src.width / 2, cy = src.top + src.height / 2;
   const fly = document.createElement('div');
   fly.className = 'carta-volando';
-  fly.style.cssText = `position:fixed; left:${src.left}px; top:${src.top}px; width:${src.width}px; height:${src.height}px;
+  fly.style.cssText = `position:fixed; left:${cx - W / 2}px; top:${cy - H / 2}px; width:${W}px; height:${H}px;
     z-index:900; pointer-events:none; transition: transform ${ms}ms cubic-bezier(.2,.7,.25,1), opacity ${ms}ms ease;`;
   fly.innerHTML = inner;
   document.body.appendChild(fly);
-  const dx = (dst.left + dst.width / 2) - (src.left + src.width / 2);
-  const dy = (dst.top + dst.height / 2) - (src.top + src.height / 2);
-  const sc = Math.max(0.4, Math.min(1.4, dst.width / src.width || 1));
+  const dx = (dst.left + dst.width / 2) - cx;
+  const dy = (dst.top + dst.height / 2) - cy;
   requestAnimationFrame(() => {
-    fly.style.transform = `translate(${dx}px, ${dy}px) scale(${sc})`;
-    fly.style.opacity = '0.85';
+    fly.style.transform = `translate(${dx}px, ${dy}px)`;
+    fly.style.opacity = '0.9';
   });
   setTimeout(() => fly.remove(), ms + 60);
 }
 function rectDe(sel) { const el = typeof sel === 'string' ? document.getElementById(sel) : sel; return el ? el.getBoundingClientRect() : null; }
 function rectMano() {
-  const m = rectDe('mano-cartas'); if (!m) return null;
+  const cont = document.getElementById('mano-cartas');
+  const cards = cont ? cont.querySelectorAll('.carta') : [];
+  if (cards.length) {
+    const r = cards[cards.length - 1].getBoundingClientRect();
+    return { left: r.left + r.width * 0.55, top: r.top, width: r.width, height: r.height }; // a la derecha de la última carta
+  }
+  const m = cont ? cont.getBoundingClientRect() : null; if (!m) return null;
   return { left: m.left + m.width / 2 - 25, top: m.top, width: 50, height: 72 };
 }
 function animarRobo(origen) {

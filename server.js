@@ -449,6 +449,7 @@ io.on('connection', socket => {
     const carta = g.mazo.shift();
     g.manos[socket.id].push(carta);
     g.fase = 'jugar';
+    socket.to(codigo).emit('accionAnim', { tipo: 'robar', jugadorId: socket.id, origen: 'mazo' });
     emitirEstado(codigo);
   });
 
@@ -461,6 +462,7 @@ io.on('connection', socket => {
     const carta = g.descarte.pop();
     g.manos[socket.id].push(carta);
     g.fase = 'jugar';
+    socket.to(codigo).emit('accionAnim', { tipo: 'robar', jugadorId: socket.id, origen: 'descarte' });
     emitirEstado(codigo);
   });
 
@@ -477,6 +479,7 @@ io.on('connection', socket => {
     const [carta] = mano.splice(idx, 1);
     g.descarte.push(carta);
 
+    socket.to(codigo).emit('accionAnim', { tipo: 'tirar', jugadorId: socket.id, carta });
     if (verificarRondaTerminada(codigo)) return;
     siguienteTurno(codigo);
     emitirEstado(codigo);
@@ -506,6 +509,8 @@ io.on('connection', socket => {
     const partes = ETAPAS[etapaIdx].partes;
     g.bajadasEtapa[socket.id] = combinaciones.map((combo, i) => ordenarCombo(partes[i], combo));
 
+    // Si al bajar quedó sin cartas (p.ej. escala real/sucia de 13) → gana la ronda
+    if (verificarRondaTerminada(codigo)) return;
     emitirEstado(codigo);
   });
 
@@ -541,6 +546,7 @@ io.on('connection', socket => {
     g.bajadasEtapa[jugadorId][comboIdx] = nuevaCombo;
     mano.splice(idx, 1);
 
+    socket.to(codigo).emit('accionAnim', { tipo: 'pegar', jugadorId: socket.id, carta, owner: jugadorId, comboIdx });
     if (verificarRondaTerminada(codigo)) return;
     emitirEstado(codigo);
   });
