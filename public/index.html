@@ -162,6 +162,47 @@ select:focus { border-color: var(--gold); }
 }
 .lang-btn:hover { color: var(--cream); }
 .lang-btn.activo { background: var(--gold); color: var(--dark); border-color: var(--gold); font-weight: 500; }
+
+/* Botón "Novedades" (lobby) */
+.novedades-btn {
+  position: relative;
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(201,168,76,0.4);
+  color: rgba(245,240,232,0.75); font-family: 'DM Mono', monospace; font-size: 0.72rem;
+  padding: 6px 12px; cursor: pointer; border-radius: 20px; transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.novedades-btn:hover { color: var(--cream); border-color: var(--gold); }
+.novedades-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gold2); box-shadow: 0 0 0 rgba(232,201,109,0.6);
+  animation: novedades-pulso 1.8s infinite;
+}
+@keyframes novedades-pulso {
+  0%   { box-shadow: 0 0 0 0 rgba(232,201,109,0.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(232,201,109,0); }
+  100% { box-shadow: 0 0 0 0 rgba(232,201,109,0); }
+}
+
+/* Modal de novedades */
+#modal-novedades {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: none; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+#modal-novedades.visible { display: flex; }
+.novedades-box { max-width: 480px; }
+.novedades-intro {
+  font-size: 0.82rem; line-height: 1.55; color: rgba(245,240,232,0.75);
+  margin-bottom: 18px; padding-bottom: 16px;
+  border-bottom: 1px solid rgba(201,168,76,0.2);
+}
+.novedades-intro a { color: var(--gold2); }
+.novedades-lista { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.novedades-lista li {
+  font-size: 0.85rem; line-height: 1.4; color: var(--cream);
+  display: flex; gap: 10px; align-items: flex-start;
+}
 /* Overlay de reconexión */
 #overlay-reconexion {
   position: fixed; inset: 0; z-index: 500;
@@ -396,6 +437,12 @@ select:focus { border-color: var(--gold); }
 #btn-descarte:empty::after {
   content: '—'; color: rgba(245,240,232,0.4); font-size: 1.2rem;
 }
+/* Resaltado al arrastrar una carta sobre la pila de descarte (soltar para tirar) */
+#btn-descarte.drop-hover { transform: translateY(-3px) scale(1.08); opacity: 1 !important; }
+#btn-descarte.drop-hover::before {
+  content: ''; position: absolute; inset: -6px; border-radius: calc(var(--radius) + 6px);
+  border: 2px dashed var(--gold); pointer-events: none;
+}
 
 /* ── Bajadas en mesa (combos) ── */
 .combo-area {
@@ -410,6 +457,10 @@ select:focus { border-color: var(--gold); }
 /* Cartas del combo superpuestas en abanico (compactas, legibles por la esquina) */
 .combo-area .carta + .carta { margin-left: -30px; }
 .combo-area:hover { border-color: var(--gold); }
+/* Resaltado al arrastrar una carta sobre un combo (soltar para pegar) */
+.combo-area.combo-drop-hover { border-color: var(--gold); border-style: solid; background: rgba(201,168,76,0.18); }
+.combo-area.combo-drop-izq { box-shadow: inset 4px 0 0 0 var(--gold); }
+.combo-area.combo-drop-der { box-shadow: inset -4px 0 0 0 var(--gold); }
 .combo-tipo { font-size: 0.62rem; color: rgba(245,240,232,0.4); margin-bottom: 2px; width: 100%; }
 
 /* ── Mano del jugador ── */
@@ -479,7 +530,7 @@ select:focus { border-color: var(--gold); }
 #mano-cartas.arrastrando .carta:hover { transform: none; box-shadow: none; }
 /* La carta fantasma que sigue al cursor/dedo */
 .carta-ghost {
-  position: fixed; margin: 0; z-index: 1000; pointer-events: none;
+  position: fixed !important; margin: 0; z-index: 1000; pointer-events: none;
   transform: rotate(-4deg) scale(1.08);
   box-shadow: 0 18px 42px rgba(0,0,0,0.7);
   border-color: var(--gold);
@@ -717,6 +768,10 @@ select:focus { border-color: var(--gold); }
     <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
     <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
   </div>
+  <button class="novedades-btn" style="position:fixed; top:14px; left:16px; z-index:50;" onclick="verNovedades()">
+    <span data-i18n="novedadesBtn">📣 Novedades</span>
+    <span class="novedades-dot" id="novedades-dot"></span>
+  </button>
   <div style="text-align:center">
     <h1>🃏 Carioca</h1>
     <p class="subtitle" data-i18n="subtitulo">JUEGO DE CARTAS ONLINE</p>
@@ -760,6 +815,26 @@ select:focus { border-color: var(--gold); }
   </div>
 
   <div id="msg-error"></div>
+
+  <!-- ── Modal de novedades ── -->
+  <div id="modal-novedades" onclick="if (event.target === this) cerrarNovedades()">
+    <div class="modal-box novedades-box">
+      <h3 data-i18n="novedadesTitulo">📣 Novedades</h3>
+      <p class="novedades-intro" data-i18n="novedadesIntro">Gracias a las sugerencias de varios jugadores que ayudaron a probar Carioca Online, hicimos estas mejoras. Si tienes ideas o encontraste algo raro, escríbeme a danielduran.ads@gmail.com — toda sugerencia ayuda a mejorar el juego.</p>
+      <ul class="novedades-lista">
+        <li><span data-i18n="novedadesItem1">🖐️ Al arrastrar una carta ahora se ve la carta completa siguiendo tu cursor, en vez de solo un hueco vacío.</span></li>
+        <li><span data-i18n="novedadesItem2">⏳ Nueva regla: al bajarte, debes esperar a que la mesa dé una vuelta completa antes de poder pegar cartas a un combo.</span></li>
+        <li><span data-i18n="novedadesItem3">🎯 Ahora puedes arrastrar una carta directo a un combo en la mesa para pegarla, eligiendo el lado izquierdo o derecho al soltarla.</span></li>
+        <li><span data-i18n="novedadesItem4">🗑️ También puedes arrastrar una carta hasta la pila de descarte para tirarla, sin necesidad de usar el botón.</span></li>
+        <li><span data-i18n="novedadesItem5">🔄 Arreglamos el orden de turno con 4 jugadores: ahora todos ven la mesa girar siempre en el mismo sentido.</span></li>
+        <li><span data-i18n="novedadesItem6">🔌 Arreglamos un bug de reconexión: si te reconectabas justo a tiempo, igual te podían dar por perdedor unos segundos después. Ya no pasa más.</span></li>
+        <li><span data-i18n="novedadesItem7">🃏 Ahora se usan dos mazos ingleses completos de 54 cartas (con sus 4 comodines), como corresponde.</span></li>
+      </ul>
+      <div class="modal-acciones">
+        <button class="btn" onclick="cerrarNovedades()" data-i18n="novedadesCerrar">¡Entendido!</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── JUEGO ── -->
@@ -816,12 +891,11 @@ select:focus { border-color: var(--gold); }
           <div id="puntos-tabla"></div>
         </div>
       </div>
-      <div class="mano-hint" data-i18n="hintMano">✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar · clic para seleccionar</div>
+      <div class="mano-hint" data-i18n="hintMano">✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar, soltar sobre un combo para pegar o sobre el descarte para tirar · clic para seleccionar</div>
       <div id="mano-cartas"></div>
       <div id="zona-acciones">
         <button class="btn btn-sm" data-i18n="bajarEtapa" onclick="abrirModalBajada()">⬇ Bajar etapa</button>
         <button class="btn btn-sm btn-red" data-i18n="tirarCarta" onclick="tirarSeleccionada()">🗑 Tirar carta</button>
-        <button class="btn btn-sm btn-outline" data-i18n="pegarCombo" onclick="pegarSeleccionada()">+ Pegar a combo</button>
         <button class="btn btn-sm btn-outline btn-zoom" id="btn-zoom" data-i18n="zoom" onclick="toggleZoomMano()">🔍 Zoom</button>
       </div>
     </div>
@@ -888,7 +962,6 @@ let soyAnfitrion = false;
 let estado = null;
 let cartasSeleccionadas = [];
 let combosModal = []; // [{cartas:[]}]
-let modoAccion = null; // 'pegar'
 let ordenMano = []; // orden visual local de la mano (ids), persistente entre renders
 let eraMiTurno = false; // para avisar cuando empieza tu turno
 
@@ -905,21 +978,30 @@ const I18N = {
     ronda: 'Ronda', modoLibre: '🎯 Modo libre', tuTurno: '✦ Tu turno', turnoDe: 'Turno de {n}',
     robaCarta: 'Roba una carta', juegaOTira: 'Juega o tira', esperando: 'Esperando...',
     etapa: 'Etapa', cartas: 'cartas', bajo: '· ✓ bajó',
-    bajarEtapa: '⬇ Bajar etapa', tirarCarta: '🗑 Tirar carta', pegarCombo: '+ Pegar a combo', zoom: '🔍 Zoom',
-    hintMano: '✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar · clic para seleccionar',
+    bajarEtapa: '⬇ Bajar etapa', tirarCarta: 'Descartar', zoom: '🔍 Zoom',
+    hintMano: '✋ Pasa el mouse (o toca 🔍 Zoom) para agrandar tu mano · arrastra para ordenar, soltar sobre un combo para pegar o sobre el descarte para tirar · clic para seleccionar',
     trio: 'TRÍO', escalera: 'ESCALERA', esperandoOponentes: 'Esperando oponentes...',
-    bajarTitulo: 'Bajar etapa', confirmarBajada: '✓ Confirmar bajada', cancelar: 'Cancelar',
+    bajarTitulo: 'Bajar', confirmarBajada: '✓ Confirmar bajada', cancelar: 'Cancelar',
     cartasDeTuMano: 'Cartas de tu mano:', trioMin: 'Trío (mín. 3 del mismo valor)', escaleraMin: 'Escalera (mín. 4 seguidas del mismo palo)',
     nuevaPartida: 'Nueva partida', puntFinal: 'Puntuación final (menos es mejor)', ganaJuego: '🏆 {n} gana el juego!', pts: 'pts',
     etapasDesc: ['2 tríos','1 trío + 1 escalera','2 escaleras','3 tríos','2 tríos + 1 escalera','1 trío + 2 escaleras','4 tríos','Escala real (color)','Escala sucia'],
     real: 'ESCALA REAL', sucia: 'ESCALA SUCIA', realMin: 'Escala real: A→K, todas del mismo palo (13 cartas)', suciaMin: 'Escala sucia: A→K, cualquier palo (13 cartas)',
     escribeNombre: 'Escribe tu nombre', escribeCodigo: 'Escribe un código de sala', codigoCopiado: 'Código copiado: {c}',
     seDesconecto: '{n} se desconectó', noTurnoRobar: 'No es tu turno o debes robar primero', selecciona1Tirar: 'Selecciona exactamente 1 carta para tirar',
-    noTurno: 'No es tu turno', selecciona1Pegar: 'Selecciona 1 carta para pegar', elegirExtremo: 'Toca el lado IZQUIERDO o DERECHO del combo para elegir dónde pegar',
-    selecciona1: 'Selecciona 1 carta primero', yaBajaste: 'Ya bajaste tu etapa en esta ronda', minJugadores: 'Se necesitan al menos 2 jugadores',
+    noTurno: 'No es tu turno', yaBajaste: 'Ya bajaste tu etapa en esta ronda', minJugadores: 'Se necesitan al menos 2 jugadores',
+    debesEsperarPegar: 'Recién bajaste: espera a tu próximo turno para pegar',
     rondaFin: '🏆 Ronda {r} terminada. ¡Ganó {n}!', comodin: 'el comodín',
     reconectando: 'Conexión perdida. Reintentando...', reconecto: '🔌 {n} reconectó', salio: '{n} salió de la partida', seDescReconect: '{n} se desconectó (reconectando...)',
     salir: '🚪 Salir', tuTurnoAviso: '¡Es tu turno!', confirmSalir: '¿Seguro que quieres abandonar la partida?',
+    novedadesBtn: '📣 Novedades', novedadesTitulo: '📣 Novedades', novedadesCerrar: '¡Entendido!',
+    novedadesIntro: 'Gracias a las sugerencias de varios jugadores que ayudaron a probar Carioca Online, hicimos estas mejoras. Si tienes ideas o encontraste algo raro, escríbeme a danielduran.ads@gmail.com — toda sugerencia ayuda a mejorar el juego.',
+    novedadesItem1: '🖐️ Al arrastrar una carta ahora se ve la carta completa siguiendo tu cursor, en vez de solo un hueco vacío.',
+    novedadesItem2: '⏳ Nueva regla: al bajarte, debes esperar a que la mesa dé una vuelta completa antes de poder pegar cartas a un combo.',
+    novedadesItem3: '🎯 Ahora puedes arrastrar una carta directo a un combo en la mesa para pegarla, eligiendo el lado izquierdo o derecho al soltarla.',
+    novedadesItem4: '🗑️ También puedes arrastrar una carta hasta la pila de descarte para tirarla, sin necesidad de usar el botón.',
+    novedadesItem5: '🔄 Arreglamos el orden de turno con 4 jugadores: ahora todos ven la mesa girar siempre en el mismo sentido.',
+    novedadesItem6: '🔌 Arreglamos un bug de reconexión: si te reconectabas justo a tiempo, igual te podían dar por perdedor unos segundos después. Ya no pasa más.',
+    novedadesItem7: '🃏 Ahora se usan dos mazos ingleses completos de 54 cartas (con sus 4 comodines), como corresponde.',
   },
   en: {
     subtitulo: 'ONLINE CARD GAME', entrar: 'Join the game', tuNombre: 'Your name',
@@ -930,8 +1012,8 @@ const I18N = {
     ronda: 'Round', modoLibre: '🎯 Free mode', tuTurno: '✦ Your turn', turnoDe: '{n}’s turn',
     robaCarta: 'Draw a card', juegaOTira: 'Play or discard', esperando: 'Waiting...',
     etapa: 'Stage', cartas: 'cards', bajo: '· ✓ down',
-    bajarEtapa: '⬇ Lay down', tirarCarta: '🗑 Discard', pegarCombo: '+ Add to meld', zoom: '🔍 Zoom',
-    hintMano: '✋ Hover (or tap 🔍 Zoom) to enlarge your hand · drag to reorder · click to select',
+    bajarEtapa: '⬇ Lay down', tirarCarta: '🗑 Discard', zoom: '🔍 Zoom',
+    hintMano: '✋ Hover (or tap 🔍 Zoom) to enlarge your hand · drag to reorder, drop on a meld to add, or on the discard pile to discard · click to select',
     trio: 'SET', escalera: 'RUN', esperandoOponentes: 'Waiting for opponents...',
     bajarTitulo: 'Lay down stage', confirmarBajada: '✓ Confirm', cancelar: 'Cancel',
     cartasDeTuMano: 'Cards from your hand:', trioMin: 'Set (min. 3 of the same value)', escaleraMin: 'Run (min. 4 in sequence, same suit)',
@@ -940,11 +1022,20 @@ const I18N = {
     real: 'ROYAL RUN', sucia: 'DIRTY RUN', realMin: 'Royal run: A→K, all the same suit (13 cards)', suciaMin: 'Dirty run: A→K, any suit (13 cards)',
     escribeNombre: 'Enter your name', escribeCodigo: 'Enter a room code', codigoCopiado: 'Code copied: {c}',
     seDesconecto: '{n} disconnected', noTurnoRobar: "It's not your turn or you must draw first", selecciona1Tirar: 'Select exactly 1 card to discard',
-    noTurno: "It's not your turn", selecciona1Pegar: 'Select 1 card to add', elegirExtremo: 'Tap the LEFT or RIGHT side of the meld to choose where to add',
-    selecciona1: 'Select 1 card first', yaBajaste: 'You already laid down this round', minJugadores: 'At least 2 players are required',
+    noTurno: "It's not your turn", yaBajaste: 'You already laid down this round', minJugadores: 'At least 2 players are required',
+    debesEsperarPegar: 'You just laid down: wait for your next turn to add cards',
     rondaFin: '🏆 Round {r} over. {n} won!', comodin: 'the wild card',
     reconectando: 'Connection lost. Reconnecting...', reconecto: '🔌 {n} reconnected', salio: '{n} left the game', seDescReconect: '{n} disconnected (reconnecting...)',
     salir: '🚪 Leave', tuTurnoAviso: 'Your turn!', confirmSalir: 'Are you sure you want to leave the game?',
+    novedadesBtn: "📣 What's new", novedadesTitulo: "📣 What's new", novedadesCerrar: 'Got it!',
+    novedadesIntro: "Thanks to suggestions from several players who helped test Carioca Online, we made these improvements. If you have ideas or ran into something odd, email me at danielduran.ads@gmail.com — every suggestion helps make the game better.",
+    novedadesItem1: '🖐️ Dragging a card now shows the full card following your cursor, instead of just an empty gap.',
+    novedadesItem2: "⏳ New rule: after laying down, you must wait for the table to go all the way around once before you can add cards to a meld.",
+    novedadesItem3: '🎯 You can now drag a card straight onto a meld on the table to add it, choosing the left or right side as you drop it.',
+    novedadesItem4: '🗑️ You can also drag a card onto the discard pile to discard it, without using the button.',
+    novedadesItem5: "🔄 Fixed the turn order with 4 players: everyone now sees the table rotate in the same direction.",
+    novedadesItem6: "🔌 Fixed a reconnect bug: reconnecting in time could still get you marked as the loser a few seconds later. That's fixed now.",
+    novedadesItem7: '🃏 Now using two complete 54-card English decks (with all 4 jokers), as it should be.',
   },
 };
 function t(k, p) {
@@ -969,6 +1060,34 @@ function aplicarIdioma() {
   if (sel) { const v = sel.value; sel.innerHTML = t('etapasDesc').map((d, i) => `<option value="${i}">${t('etapa')} ${i + 1}: ${d}</option>`).join(''); if (v) sel.value = v; }
   if (estado) renderEstado();
 }
+
+// ── Novedades (lobby) ─────────────────────────────────────────────────────────
+// Subir este valor cada vez que se agreguen novedades nuevas, para que el popup
+// vuelva a saltarle al jugador aunque ya haya cerrado una versión anterior.
+const NOVEDADES_VERSION = '2026-07-turnos-reconexion-mazo';
+function verNovedades() {
+  document.getElementById('modal-novedades').classList.add('visible');
+  const dot = document.getElementById('novedades-dot');
+  if (dot) dot.style.display = 'none';
+}
+function cerrarNovedades() {
+  document.getElementById('modal-novedades').classList.remove('visible');
+  // Recién al cerrar queda "vista" esta versión: así no vuelve a saltarle al jugador.
+  try { localStorage.setItem('carioca_novedades_vistas', NOVEDADES_VERSION); } catch (e) {}
+  const dot = document.getElementById('novedades-dot');
+  if (dot) dot.style.display = 'none';
+}
+(function mostrarNovedadesSiCorresponde() {
+  let vistas = null;
+  try { vistas = localStorage.getItem('carioca_novedades_vistas'); } catch (e) {}
+  if (vistas === NOVEDADES_VERSION) {
+    const dot = document.getElementById('novedades-dot');
+    if (dot) dot.style.display = 'none';
+  } else {
+    // Todavía no vio esta versión de las novedades → se la mostramos de una, sin esperar el clic.
+    verNovedades();
+  }
+})();
 
 // ── Lobby ────────────────────────────────────────────────────────────────────
 function mostrarOpciones() {
@@ -1214,23 +1333,31 @@ function renderEstado() {
       const tipo = tipos[ci] || '';
       const area = document.createElement('div');
       area.className = 'combo-area';
+      area.dataset.jugador = id;
+      area.dataset.comboIdx = ci;
+      area.dataset.tipo = tipo;
       area.innerHTML = `<div class="combo-tipo">${t(tipo) || t('escalera')}</div>` +
         combo.map(c => cartaHTML(c, false)).join('');
-      area.onclick = (ev) => pegarEnCombo(id, ci, ev);
       wrap.appendChild(area);
     });
     grupo.appendChild(wrap);
     return grupo;
   }
 
-  const oponentes = e.jugadores.filter(id => id !== miId);
+  // Ordenar a los oponentes empezando por el que juega DESPUÉS de mí (y así sucesivamente,
+  // siguiendo el turno) en vez del orden crudo de e.jugadores. Si no, cada jugador ve a sus
+  // rivales en una posición distinta (izq/arriba/der) y el turno "salta" sin un sentido fijo.
+  const idxYo = e.jugadores.indexOf(miId);
+  const oponentes = idxYo === -1
+    ? e.jugadores.filter(id => id !== miId)
+    : [...e.jugadores.slice(idxYo + 1), ...e.jugadores.slice(0, idxYo)];
   if (oponentes.length === 0) {
     celdaTop.innerHTML = `<span class="sin-oponentes">${t('esperandoOponentes')}</span>`;
   } else {
-    // 1 → arriba; 2 → izq/der; 3 → izq/arriba/der
+    // 1 → arriba; 2 → der/izq; 3 → der/arriba/izq (el turno siempre avanza der → arriba → izq → yo)
     const areas = oponentes.length <= 1 ? ['top']
-                : oponentes.length === 2 ? ['left', 'right']
-                : ['left', 'top', 'right'];
+                : oponentes.length === 2 ? ['right', 'left']
+                : ['right', 'top', 'left'];
     const celdaDe = { top: celdaTop, left: celdaLeft, right: celdaRight };
     oponentes.forEach((id, i) => {
       const cell = celdaDe[areas[i]] || celdaTop;
@@ -1319,7 +1446,7 @@ function ajustarAbanico() {
 window.addEventListener('resize', ajustarAbanico);
 
 // ── Arrastrar para reordenar la mano (mouse + touch) ──────────────────────────
-// drag = { card, id, startX, startY, dragging, moved, ghost, offX, offY }
+// drag = { card, id, startX, startY, dragging, moved, ghost, offX, offY, hoverArea, hoverIzquierda, hoverDescarte }
 let drag = null;
 
 function attachCartaInteraccion(card, id) {
@@ -1331,6 +1458,7 @@ function attachCartaInteraccion(card, id) {
       card, id,
       startX: ev.clientX, startY: ev.clientY,
       dragging: false, moved: false, ghost: null, offX: 0, offY: 0,
+      hoverArea: null, hoverIzquierda: false, hoverDescarte: false,
     };
     document.addEventListener('pointermove', onDragMove);
     document.addEventListener('pointerup', onDragEnd);
@@ -1352,6 +1480,17 @@ function onDragMove(ev) {
   drag.ghost.style.left = (ev.clientX - drag.offX) + 'px';
   drag.ghost.style.top  = (ev.clientY - drag.offY) + 'px';
 
+  // ¿El puntero está sobre un combo de la mesa? → resaltarlo y no reordenar la mano
+  const elBajoPuntero = document.elementFromPoint(ev.clientX, ev.clientY);
+  const comboArea = elBajoPuntero?.closest('.combo-area') || null;
+  actualizarHoverCombo(comboArea, ev.clientX);
+  if (comboArea) { actualizarHoverDescarte(null); return; }
+
+  // ¿El puntero está sobre la pila de descarte? → resaltarla y no reordenar la mano
+  const sobreDescarte = !!elBajoPuntero?.closest('#btn-descarte');
+  actualizarHoverDescarte(sobreDescarte);
+  if (sobreDescarte) return;
+
   // Mover el hueco (placeholder) entre las demás cartas
   const cont = document.getElementById('mano-cartas');
   if (!cont.contains(drag.card)) { cancelarDrag(); return; } // la mano se re-renderizó: abortar
@@ -1360,11 +1499,36 @@ function onDragMove(ev) {
   else if (ref !== drag.card) cont.insertBefore(drag.card, ref);
 }
 
+// Resalta el combo bajo el puntero mientras se arrastra una carta, marcando si se pegaría a la izquierda o a la derecha
+function actualizarHoverCombo(area, clientX) {
+  if (drag.hoverArea && drag.hoverArea !== area) {
+    drag.hoverArea.classList.remove('combo-drop-hover', 'combo-drop-izq', 'combo-drop-der');
+  }
+  drag.hoverArea = area;
+  drag.hoverIzquierda = false;
+  if (!area) return;
+  area.classList.add('combo-drop-hover');
+  const esEscalera = area.dataset.tipo !== 'trio';
+  const rect = area.getBoundingClientRect();
+  const izquierda = (clientX - rect.left) < rect.width / 2;
+  drag.hoverIzquierda = izquierda;
+  area.classList.toggle('combo-drop-izq', esEscalera && izquierda);
+  area.classList.toggle('combo-drop-der', esEscalera && !izquierda);
+}
+
+// Resalta la pila de descarte mientras se arrastra una carta sobre ella
+function actualizarHoverDescarte(activo) {
+  drag.hoverDescarte = !!activo;
+  document.getElementById('btn-descarte').classList.toggle('drop-hover', !!activo);
+}
+
 // Cancela un arrastre en curso sin duplicar nada (limpia fantasma y listeners)
 function cancelarDrag() {
   document.removeEventListener('pointermove', onDragMove);
   document.removeEventListener('pointerup', onDragEnd);
   document.removeEventListener('pointercancel', onDragEnd);
+  if (drag && drag.hoverArea) drag.hoverArea.classList.remove('combo-drop-hover', 'combo-drop-izq', 'combo-drop-der');
+  document.getElementById('btn-descarte')?.classList.remove('drop-hover');
   if (drag && drag.ghost) drag.ghost.remove();
   const cont = document.getElementById('mano-cartas');
   if (cont) cont.classList.remove('arrastrando');
@@ -1402,12 +1566,24 @@ function onDragEnd() {
   document.removeEventListener('pointercancel', onDragEnd);
 
   if (drag.dragging) {
+    const { hoverArea, hoverIzquierda, hoverDescarte, id: cartaId } = drag;
+    if (hoverArea) hoverArea.classList.remove('combo-drop-hover', 'combo-drop-izq', 'combo-drop-der');
+    document.getElementById('btn-descarte')?.classList.remove('drop-hover');
     drag.card.classList.remove('placeholder');
     if (drag.ghost) drag.ghost.remove();
     const cont = document.getElementById('mano-cartas');
     cont.classList.remove('arrastrando');
-    // Guardar el nuevo orden visual leyendo el DOM
-    ordenMano = [...cont.querySelectorAll('.carta')].map(c => c.dataset.id);
+
+    if (hoverArea) {
+      // Se soltó sobre un combo de la mesa: intentar pegar en vez de reordenar
+      intentarPegarEnCombo(hoverArea, cartaId, hoverIzquierda);
+    } else if (hoverDescarte) {
+      // Se soltó sobre la pila de descarte: intentar tirar la carta
+      intentarTirarCarta(cartaId);
+    } else {
+      // Guardar el nuevo orden visual leyendo el DOM
+      ordenMano = [...cont.querySelectorAll('.carta')].map(c => c.dataset.id);
+    }
     ajustarAbanico(); // recolocar el solapamiento tras reordenar
   } else if (!drag.moved) {
     seleccionarCarta(drag.id); // fue un clic, no un arrastre
@@ -1471,40 +1647,38 @@ function robarDescarte() {
 }
 
 function tirarSeleccionada() {
-  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurnoRobar'));
   if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1Tirar'));
-  const cartaId = cartasSeleccionadas[0];
+  intentarTirarCarta(cartasSeleccionadas[0]);
+}
+
+// Se llama también al soltar una carta arrastrada sobre la pila de descarte (ver onDragEnd más abajo).
+function intentarTirarCarta(cartaId) {
+  if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurnoRobar'));
   const cartaEl = document.querySelector(`#mano-cartas .carta[data-id="${cartaId}"]`);
   const carta = (estado.miMano || []).find(c => c.id === cartaId);
   if (carta) animarTirar(cartaEl, carta);
   socket.emit('tirarCarta', { cartaId });
-  cartasSeleccionadas = [];
+  cartasSeleccionadas = cartasSeleccionadas.filter(id => id !== cartaId);
 }
 
-function pegarSeleccionada() {
+// Se llama al soltar una carta arrastrada sobre un combo (ver onDragEnd más abajo).
+// El lado donde se soltó decide el extremo: izquierda = posición 0, derecha = final.
+function intentarPegarEnCombo(area, cartaId, izquierda) {
   if (!estado?.soyYo || estado?.fase !== 'jugar') return toast(t('noTurno'));
-  if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1Pegar'));
-  toast(t('elegirExtremo'));
-  modoAccion = 'pegar';
-}
-
-function pegarEnCombo(jugadorId, comboIdx, ev) {
-  if (modoAccion !== 'pegar') return;
-  if (cartasSeleccionadas.length !== 1) return toast(t('selecciona1'));
-  const cartaId = cartasSeleccionadas[0];
-  // El lado donde se hace clic decide el extremo: izquierda = posición 0, derecha = final
-  const rect = ev.currentTarget.getBoundingClientRect();
-  const izquierda = (ev.clientX - rect.left) < rect.width / 2;
-  const cartaEl = document.querySelector(`#mano-cartas .carta[data-id="${cartaId}"]`);
+  if (estado.puedePegar && estado.puedePegar[miId] === false) return toast(t('debesEsperarPegar'));
+  const jugadorId = area.dataset.jugador;
+  const comboIdx = Number(area.dataset.comboIdx);
+  const combo = estado?.bajadasEtapa?.[jugadorId]?.[comboIdx];
+  if (!combo) return;
   const carta = (estado.miMano || []).find(c => c.id === cartaId);
-  if (carta) animarPegar(cartaEl, ev.currentTarget, carta);
+  const cartaEl = document.querySelector(`#mano-cartas .carta[data-id="${cartaId}"]`);
+  if (carta) animarPegar(cartaEl, area, carta);
   socket.emit('pegarCarta', {
     cartaId,
     jugadorId, comboIdx,
-    posicion: izquierda ? 0 : estado.bajadasEtapa[jugadorId][comboIdx].length,
+    posicion: izquierda ? 0 : combo.length,
   });
-  cartasSeleccionadas = [];
-  modoAccion = null;
+  cartasSeleccionadas = cartasSeleccionadas.filter(id => id !== cartaId);
 }
 
 // ── Modal Bajada ──────────────────────────────────────────────────────────────

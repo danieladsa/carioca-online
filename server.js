@@ -29,7 +29,9 @@ const TOTAL_ETAPAS = ETAPAS.length; // 9
 
 // ── Helpers de cartas ─────────────────────────────────────────────────────────
 let _cartaSeq = 0; // contador global → cada carta tiene un id ÚNICO (sin colisiones)
+const JOKERS_POR_MAZO = 2; // un mazo inglés de 54 cartas = 52 + 2 jokers
 function crearMazo() {
+  // Dos mazos ingleses completos de 54 cartas cada uno (52 + 2 jokers) = 108 cartas en total.
   const mazo = [];
   for (let d = 0; d < 2; d++) {
     for (const palo of PALOS) {
@@ -37,7 +39,9 @@ function crearMazo() {
         mazo.push({ val, palo, id: 'k' + (_cartaSeq++) });
       }
     }
-    mazo.push({ val: COMODIN, palo: '', id: 'k' + (_cartaSeq++) });
+    for (let j = 0; j < JOKERS_POR_MAZO; j++) {
+      mazo.push({ val: COMODIN, palo: '', id: 'k' + (_cartaSeq++) });
+    }
   }
   return mazo;
 }
@@ -203,6 +207,7 @@ function nuevaPartida(jugadores, opciones = {}) {
     turno: jugadores[0],
     etapas: Object.fromEntries(jugadores.map(id => [id, etapaInicial])),
     bajadasEtapa: Object.fromEntries(jugadores.map(id => [id, null])),
+    puedePegar: Object.fromEntries(jugadores.map(id => [id, true])),
     puntos: Object.fromEntries(jugadores.map(id => [id, 0])),
     ronda: 1,
     fase: 'robar', // robar | jugar
@@ -224,6 +229,7 @@ function estadoPublico(sala, pov) {
     fase: g.fase,
     etapas: g.etapas,
     bajadasEtapa: g.bajadasEtapa,
+    puedePegar: g.puedePegar,
     puntos: g.puntos,
     ronda: g.ronda,
     nombres: g.nombres,
@@ -248,6 +254,9 @@ function siguienteTurno(codigoSala) {
   const idx = g.jugadores.indexOf(g.turno);
   g.turno = g.jugadores[(idx + 1) % g.jugadores.length];
   g.fase = 'robar';
+  // Si el jugador al que le toca había bajado, ya dio la vuelta completa a la mesa:
+  // recién ahora puede pegar cartas a combos.
+  if (g.puedePegar[g.turno] === false) g.puedePegar[g.turno] = true;
 }
 
 function verificarRondaTerminada(codigoSala) {
@@ -297,6 +306,7 @@ function verificarRondaTerminada(codigoSala) {
     g.mazo = nuevoMazo;
     g.descarte = [g.mazo.splice(0, 1)[0]];
     g.bajadasEtapa = Object.fromEntries(g.jugadores.map(id => [id, null]));
+    g.puedePegar = Object.fromEntries(g.jugadores.map(id => [id, true]));
     g.turno = g.jugadores[g.ronda % g.jugadores.length];
     g.fase = 'robar';
     g.ronda++;
@@ -319,7 +329,7 @@ function remapearJugador(sala, oldId, newId) {
   const g = sala.game;
   if (g) {
     g.jugadores = g.jugadores.map(id => (id === oldId ? newId : id));
-    for (const m of ['manos', 'etapas', 'bajadasEtapa', 'puntos', 'nombres']) {
+    for (const m of ['manos', 'etapas', 'bajadasEtapa', 'puedePegar', 'puntos', 'nombres']) {
       if (g[m] && Object.prototype.hasOwnProperty.call(g[m], oldId)) { g[m][newId] = g[m][oldId]; delete g[m][oldId]; }
     }
     if (g.turno === oldId) g.turno = newId;
@@ -338,7 +348,7 @@ function removerJugadorDefinitivo(codigo, token) {
     const eraSuTurno = g.turno === slotId;
     const idx = g.jugadores.indexOf(slotId);
     g.jugadores = g.jugadores.filter(id => id !== slotId);
-    ['manos', 'etapas', 'bajadasEtapa', 'puntos', 'nombres'].forEach(m => { if (g[m]) delete g[m][slotId]; });
+    ['manos', 'etapas', 'bajadasEtapa', 'puedePegar', 'puntos', 'nombres'].forEach(m => { if (g[m]) delete g[m][slotId]; });
     if (eraSuTurno && g.jugadores.length) { g.turno = g.jugadores[idx % g.jugadores.length]; g.fase = 'robar'; }
   }
   sala.jugadores = sala.jugadores.filter(id => id !== slotId);
@@ -508,6 +518,8 @@ io.on('connection', socket => {
     g.manos[socket.id] = mano;
     const partes = ETAPAS[etapaIdx].partes;
     g.bajadasEtapa[socket.id] = combinaciones.map((combo, i) => ordenarCombo(partes[i], combo));
+    // Recién bajó: debe esperar a que la mesa dé una vuelta completa antes de poder pegar
+    g.puedePegar[socket.id] = false;
 
     // Si al bajar quedó sin cartas (p.ej. escala real/sucia de 13) → gana la ronda
     if (verificarRondaTerminada(codigo)) return;
@@ -520,6 +532,7 @@ io.on('connection', socket => {
     const g = sala?.game;
     if (!g || g.turno !== socket.id || g.fase !== 'jugar') return;
     if (!g.bajadasEtapa[socket.id]) return socket.emit('error', 'Debes bajar tu etapa primero');
+    if (!g.puedePegar[socket.id]) return socket.emit('error', 'Debes esperar a tu próximo turno para pegar');
     if (!g.bajadasEtapa[jugadorId]) return socket.emit('error', 'Ese jugador aún no bajó');
 
     const mano = g.manos[socket.id];
@@ -575,7 +588,15 @@ io.on('connection', socket => {
     const sala = codigo && salas[codigo];
     if (sala) {
       const token = sala.tokens?.[socket.id] || socket.token;
-      if (sala.game && token) {
+      // Si el token ya quedó apuntando a OTRO socket, es que una reconexión (con el mismo
+      // token) ya tomó esta plaza antes de que llegara este 'disconnect' del socket viejo
+      // (pasa seguido al recargar la página: el socket nuevo se conecta y reconecta antes
+      // de que el navegador termine de cerrar el viejo). Este evento ya quedó obsoleto:
+      // no hay que tratar al jugador como desconectado ni volver a armar el temporizador.
+      const yaReconectado = !!(token && sala.slots && sala.slots[token] && sala.slots[token] !== socket.id);
+      if (yaReconectado) {
+        // no-op
+      } else if (sala.game && token) {
         // Partida en curso → guardar el lugar y dar tiempo para reconectar
         sala.desconectados = sala.desconectados || {};
         sala.desconectados[token] = true;
