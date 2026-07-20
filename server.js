@@ -235,6 +235,7 @@ function estadoPublico(sala, pov) {
     nombres: g.nombres,
     jugadores: g.jugadores,
     modoLibre: !!g.modoLibre,
+    bots: [...(sala.bots || [])],
     manosAjenas: Object.fromEntries(otros.map(id => [id, g.manos[id]?.length ?? 0])),
   };
 }
@@ -246,6 +247,7 @@ function emitirEstado(codigoSala) {
     const socket = io.sockets.sockets.get(id);
     if (socket) socket.emit('estado', estadoPublico(sala, id));
   });
+  programarTurnoBot(codigoSala);
 }
 
 function siguienteTurno(codigoSala) {
@@ -358,6 +360,8 @@ function removerJugadorDefinitivo(codigo, token) {
   if (sala.timeouts) delete sala.timeouts[token];
   io.to(codigo).emit('jugadorSalio', { nombre });
   if (sala.jugadores.length === 0) { delete salas[codigo]; return; }
+  limpiarSalaSiSinHumanos(codigo); // no dejar bots jugando solos entre ellos
+  if (!salas[codigo]) return;
   if (sala.game && sala.game.jugadores.length < 2) {
     // Solo queda 1 jugador → gana por abandono
     const ganador = sala.game.jugadores[0];
@@ -365,6 +369,309 @@ function removerJugadorDefinitivo(codigo, token) {
     return;
   }
   if (sala.game) emitirEstado(codigo);
+}
+
+// ── Bots (jugadores IA) ───────────────────────────────────────────────────────
+const NOMBRES_BOT = ['Bot Rio', 'Bot Copa', 'Bot Samba', 'Bot Lapa'];
+
+function esBot(sala, id) { return !!(sala.bots && sala.bots.has(id)); }
+
+function nombreBotDisponible(sala) {
+  const usados = new Set(Object.values(sala.nombres || {}));
+  return NOMBRES_BOT.find(n => !usados.has(n)) || `Bot ${Math.floor(100 + Math.random() * 900)}`;
+}
+
+function infoJugadores(sala) {
+  return sala.jugadores.map(id => ({ id, nombre: sala.nombres[id], bot: esBot(sala, id) }));
+}
+
+// Si tras irse un jugador ya no queda ningún humano, no tiene sentido dejar bots jugando
+// solos entre ellos para siempre: se cierra la sala.
+function limpiarSalaSiSinHumanos(codigo) {
+  const sala = salas[codigo];
+  if (!sala) return;
+  const quedaAlgunHumano = sala.jugadores.some(id => !esBot(sala, id));
+  if (!quedaAlgunHumano) {
+    if (sala._botTimer) clearTimeout(sala._botTimer);
+    delete salas[codigo];
+  }
+}
+
+// ── IA: elegir combinaciones para bajar etapa ──────────────────────────────────
+function mejorTrio(cartas) {
+  const jokers = cartas.filter(esComodin);
+  const porValor = {};
+  cartas.filter(c => !esComodin(c)).forEach(c => { (porValor[c.val] = porValor[c.val] || []).push(c); });
+  let mejor = null;
+  for (const val in porValor) {
+    const grupo = porValor[val];
+    if (grupo.length >= 3 && (!mejor || grupo.length > mejor.length)) mejor = grupo;
+  }
+  if (mejor) return mejor;
+  for (const val in porValor) {
+    const grupo = porValor[val];
+    if (grupo.length === 2 && jokers.length >= 1) return [...grupo, jokers[0]];
+  }
+  return null;
+}
+
+// Busca la mejor escalera posible en la mano. Si maxLenExacto se define (13, para "real"),
+// solo acepta ventanas de ese largo exacto; si no, prueba desde la más larga hacia minLen.
+function mejorEscalera(cartas, minLen, maxLenExacto) {
+  const N = VALORES.length;
+  const jokers = cartas.filter(esComodin);
+  const palos = [...new Set(cartas.filter(c => !esComodin(c)).map(c => c.palo))];
+  const largos = maxLenExacto ? [maxLenExacto] : Array.from({ length: N - minLen + 1 }, (_, i) => N - i);
+  let mejor = null;
+  for (const palo of palos) {
+    const porValor = {};
+    cartas.filter(c => !esComodin(c) && c.palo === palo).forEach(c => { porValor[VALORES.indexOf(c.val)] = c; });
+    for (const largo of largos) {
+      let encontradoEnEsteLargo = false;
+      for (let inicio = 0; inicio < N; inicio++) {
+        const reales = [];
+        let faltan = 0;
+        for (let k = 0; k < largo; k++) {
+          const p = (inicio + k) % N;
+          if (porValor[p] !== undefined) reales.push(porValor[p]); else faltan++;
+        }
+        if (!reales.length || faltan > jokers.length) continue;
+        encontradoEnEsteLargo = true;
+        const score = reales.length - faltan * 1.4;
+        if (!mejor || score > mejor.score) mejor = { score, combo: [...reales, ...jokers.slice(0, faltan)] };
+      }
+      if (encontradoEnEsteLargo) break; // ya se probó el largo más largo posible para este palo
+    }
+  }
+  return mejor ? mejor.combo : null;
+}
+
+// Escala sucia: una carta de cada valor (cualquier palo), comodines tapan lo que falte
+function mejorSucia(cartas) {
+  const jokers = cartas.filter(esComodin);
+  const porValor = {};
+  cartas.filter(c => !esComodin(c)).forEach(c => { if (!(c.val in porValor)) porValor[c.val] = c; });
+  const faltan = VALORES.length - Object.keys(porValor).length;
+  if (faltan > jokers.length) return null;
+  return [...VALORES.map(v => porValor[v]).filter(Boolean), ...jokers.slice(0, faltan)];
+}
+
+function prioridadTipo(tipo) { return (tipo === 'real' || tipo === 'sucia') ? 0 : (tipo === 'escalera' ? 1 : 2); }
+
+// Intenta armar TODAS las partes de la etapa actual con la mano dada. Devuelve las
+// combinaciones (mismo formato que espera bajarEtapa) o null si no alcanza.
+function buscarCombinacionEtapa(mano, partes) {
+  const orden = partes.map((tipo, i) => ({ tipo, i })).sort((a, b) => prioridadTipo(a.tipo) - prioridadTipo(b.tipo));
+  let restante = [...mano];
+  const asignado = new Array(partes.length).fill(null);
+  for (const { tipo, i } of orden) {
+    let combo;
+    if (tipo === 'trio') combo = mejorTrio(restante);
+    else if (tipo === 'real') combo = mejorEscalera(restante, 13, 13);
+    else if (tipo === 'sucia') combo = mejorSucia(restante);
+    else combo = mejorEscalera(restante, 4, null);
+    if (!combo) return null;
+    asignado[i] = combo;
+    const usadas = new Set(combo.map(c => c.id));
+    restante = restante.filter(c => !usadas.has(c.id));
+  }
+  // Doble chequeo con las funciones oficiales de validación antes de aplicar nada.
+  if (!partes.every((tipo, i) => validarCombinacion(tipo, asignado[i]))) return null;
+  return asignado;
+}
+
+// ── IA: decidir de dónde robar ──────────────────────────────────────────────────
+function bocaDescarteConviene(g, botId) {
+  const top = g.descarte[g.descarte.length - 1];
+  if (!top) return false;
+  if (esComodin(top)) return true;
+  const N = VALORES.length;
+  const mano = g.manos[botId];
+  const mismoValor = mano.filter(c => !esComodin(c) && c.val === top.val).length;
+  if (mismoValor >= 2) return true; // completaría un trío
+  const idx = VALORES.indexOf(top.val);
+  const esVecino = mano.some(c => {
+    if (esComodin(c) || c.palo !== top.palo) return false;
+    const d = (VALORES.indexOf(c.val) - idx + N) % N;
+    return d === 1 || d === N - 1;
+  });
+  if (esVecino) return true;
+  if (g.bajadasEtapa[botId]) {
+    const partes = ETAPAS[g.etapas[botId]].partes;
+    for (let i = 0; i < g.bajadasEtapa[botId].length; i++) {
+      const combo = g.bajadasEtapa[botId][i];
+      const tipo = partes[i];
+      const sirve = tipo === 'trio'
+        ? validarTrio([...combo, top])
+        : !!(pegarEnEscalera(combo, top, true) || pegarEnEscalera(combo, top, false));
+      if (sirve) return true;
+    }
+  }
+  return false;
+}
+
+// ── IA: elegir qué carta descartar ──────────────────────────────────────────────
+function elegirDescarte(g, botId) {
+  const mano = g.manos[botId];
+  const N = VALORES.length;
+  const conteoValor = {};
+  mano.forEach(c => { if (!esComodin(c)) conteoValor[c.val] = (conteoValor[c.val] || 0) + 1; });
+
+  function utilidad(c) {
+    if (esComodin(c)) return 1000; // los comodines casi nunca conviene tirarlos
+    let score = 0;
+    if (conteoValor[c.val] >= 2) score += 50; // parte de un posible trío
+    const idx = VALORES.indexOf(c.val);
+    const tieneVecino = (d) => mano.some(o => !esComodin(o) && o.palo === c.palo && o.id !== c.id && (VALORES.indexOf(o.val) - idx + N) % N === d);
+    if (tieneVecino(1) || tieneVecino(N - 1)) score += 30; // vecino consecutivo: posible escalera
+    if (tieneVecino(2) || tieneVecino(N - 2)) score += 12;
+    return score;
+  }
+
+  // Evitar regalarle una carta a un rival que ya bajó su etapa.
+  function riesgoRival(c) {
+    let r = 0;
+    for (const pid of g.jugadores) {
+      if (pid === botId || !g.bajadasEtapa[pid]) continue;
+      const partes = ETAPAS[g.etapas[pid]].partes;
+      g.bajadasEtapa[pid].forEach((combo, i) => {
+        const tipo = partes[i];
+        const sirve = tipo === 'trio' ? validarTrio([...combo, c]) : !!(pegarEnEscalera(combo, c, true) || pegarEnEscalera(combo, c, false));
+        if (sirve) r += 40;
+      });
+    }
+    return r;
+  }
+
+  let elegida = mano[0], peorScore = Infinity;
+  for (const c of mano) {
+    const score = utilidad(c) + riesgoRival(c) - valorCarta(c) * 0.1;
+    if (score < peorScore) { peorScore = score; elegida = c; }
+  }
+  return elegida;
+}
+
+// ── IA: ejecutar el turno completo de un bot ───────────────────────────────────
+function botRobar(codigo, botId) {
+  const g = salas[codigo].game;
+  if (bocaDescarteConviene(g, botId) && g.descarte.length > 0) {
+    const carta = g.descarte.pop();
+    g.manos[botId].push(carta);
+    io.to(codigo).emit('accionAnim', { tipo: 'robar', jugadorId: botId, origen: 'descarte' });
+  } else {
+    if (g.mazo.length === 0) {
+      const top = g.descarte.pop();
+      g.mazo = barajar(g.descarte);
+      g.descarte = [top];
+    }
+    const carta = g.mazo.shift();
+    g.manos[botId].push(carta);
+    io.to(codigo).emit('accionAnim', { tipo: 'robar', jugadorId: botId, origen: 'mazo' });
+  }
+  g.fase = 'jugar';
+}
+
+function botBajarEtapa(codigo, botId, combinaciones) {
+  const g = salas[codigo].game;
+  const etapaIdx = g.etapas[botId];
+  if (!validarEtapa(etapaIdx, combinaciones)) return false;
+  const mano = [...g.manos[botId]];
+  for (const carta of combinaciones.flat()) {
+    const i = mano.findIndex(c => c.id === carta.id);
+    if (i === -1) return false;
+    mano.splice(i, 1);
+  }
+  g.manos[botId] = mano;
+  const partes = ETAPAS[etapaIdx].partes;
+  g.bajadasEtapa[botId] = combinaciones.map((combo, i) => ordenarCombo(partes[i], combo));
+  g.puedePegar[botId] = false;
+  return true;
+}
+
+// Pega a la mesa (propia o ajena) toda carta de la mano que encaje, hasta que no quede ninguna.
+function botPegarCartas(codigo, botId) {
+  const g = salas[codigo].game;
+  let siguioPegando = true;
+  while (siguioPegando) {
+    siguioPegando = false;
+    const mano = g.manos[botId];
+    busquedaCarta:
+    for (let idx = 0; idx < mano.length; idx++) {
+      const carta = mano[idx];
+      for (const pid of g.jugadores) {
+        if (!g.bajadasEtapa[pid]) continue;
+        const partes = ETAPAS[g.etapas[pid]].partes;
+        for (let ci = 0; ci < g.bajadasEtapa[pid].length; ci++) {
+          const combo = g.bajadasEtapa[pid][ci];
+          const tipo = partes[ci];
+          let nuevo = null;
+          if (tipo === 'trio') {
+            const intento = [...combo, carta];
+            if (validarTrio(intento)) nuevo = intento;
+          } else {
+            nuevo = pegarEnEscalera(combo, carta, true) || pegarEnEscalera(combo, carta, false);
+          }
+          if (nuevo) {
+            g.bajadasEtapa[pid][ci] = nuevo;
+            mano.splice(idx, 1);
+            io.to(codigo).emit('accionAnim', { tipo: 'pegar', jugadorId: botId, carta, owner: pid, comboIdx: ci });
+            siguioPegando = true;
+            break busquedaCarta;
+          }
+        }
+      }
+    }
+  }
+}
+
+function botTirarCarta(codigo, botId) {
+  const g = salas[codigo].game;
+  const mano = g.manos[botId];
+  if (!mano.length) return;
+  const carta = elegirDescarte(g, botId);
+  const idx = mano.findIndex(c => c.id === carta.id);
+  mano.splice(idx, 1);
+  g.descarte.push(carta);
+  io.to(codigo).emit('accionAnim', { tipo: 'tirar', jugadorId: botId, carta });
+  if (verificarRondaTerminada(codigo)) return;
+  siguienteTurno(codigo);
+  emitirEstado(codigo);
+}
+
+function ejecutarTurnoBot(codigo, botIdEsperado) {
+  const sala = salas[codigo];
+  if (!sala || !sala.game) return;
+  const g = sala.game;
+  if (g.turno !== botIdEsperado || !esBot(sala, g.turno)) return;
+  const botId = g.turno;
+
+  botRobar(codigo, botId);
+
+  if (!g.bajadasEtapa[botId]) {
+    const partes = ETAPAS[g.etapas[botId]].partes;
+    const combinaciones = buscarCombinacionEtapa(g.manos[botId], partes);
+    if (combinaciones) botBajarEtapa(codigo, botId, combinaciones);
+  }
+  if (verificarRondaTerminada(codigo)) return;
+
+  if (g.bajadasEtapa[botId] && g.puedePegar[botId]) botPegarCartas(codigo, botId);
+  if (verificarRondaTerminada(codigo)) return;
+
+  botTirarCarta(codigo, botId);
+}
+
+// Se llama cada vez que se emite el estado; si le toca a un bot, agenda su jugada con
+// un pequeño delay (para que se sienta natural) y evita duplicar el timer.
+function programarTurnoBot(codigo) {
+  const sala = salas[codigo];
+  if (!sala || !sala.game || sala._botTimer) return;
+  const g = sala.game;
+  if (!esBot(sala, g.turno)) return;
+  const botId = g.turno;
+  sala._botTimer = setTimeout(() => {
+    sala._botTimer = null;
+    ejecutarTurnoBot(codigo, botId);
+  }, 900 + Math.floor(Math.random() * 700));
 }
 
 // ── Socket.io ─────────────────────────────────────────────────────────────────
@@ -395,7 +702,7 @@ io.on('connection', socket => {
     socket.salaActual = codigo;
     socket.token = token;
     if (sala.desconectados) delete sala.desconectados[token];
-    const jugadoresInfo = sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] }));
+    const jugadoresInfo = infoJugadores(sala);
     io.to(codigo).emit('jugadorReconectado', { nombre: sala.nombres[socket.id], jugadores: jugadoresInfo });
     if (sala.game) {
       socket.emit('juegoIniciado');
@@ -407,7 +714,7 @@ io.on('connection', socket => {
 
   socket.on('crearSala', ({ nombre, token }) => {
     const codigo = Math.random().toString(36).slice(2, 6).toUpperCase();
-    salas[codigo] = { jugadores: [socket.id], nombres: { [socket.id]: nombre }, game: null, tokens: {}, slots: {}, timeouts: {}, desconectados: {} };
+    salas[codigo] = { jugadores: [socket.id], nombres: { [socket.id]: nombre }, game: null, tokens: {}, slots: {}, timeouts: {}, desconectados: {}, bots: new Set() };
     socket.join(codigo);
     socket.salaActual = codigo;
     registrarToken(salas[codigo], token);
@@ -427,10 +734,40 @@ io.on('connection', socket => {
     socket.salaActual = codigo;
     registrarToken(sala, token);
 
-    const jugadoresInfo = sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] }));
+    const jugadoresInfo = infoJugadores(sala);
     io.to(codigo).emit('jugadorUnido', { jugadores: jugadoresInfo });
     socket.emit('salaUnida', { codigo, jugadores: jugadoresInfo });
     console.log(`${nombre} se unió a sala ${codigo}`);
+  });
+
+  socket.on('agregarBot', () => {
+    const codigo = socket.salaActual;
+    const sala = salas[codigo];
+    if (!sala || sala.jugadores[0] !== socket.id) return; // solo el anfitrión
+    if (sala.game) return socket.emit('error', 'Partida en curso');
+    if (sala.jugadores.length >= 4) return socket.emit('error', 'Sala llena (máx 4)');
+
+    sala.bots = sala.bots || new Set();
+    const botId = 'bot_' + Math.random().toString(36).slice(2, 9);
+    sala.jugadores.push(botId);
+    sala.nombres[botId] = nombreBotDisponible(sala);
+    sala.bots.add(botId);
+
+    io.to(codigo).emit('jugadorUnido', { jugadores: infoJugadores(sala) });
+  });
+
+  socket.on('quitarBot', ({ botId }) => {
+    const codigo = socket.salaActual;
+    const sala = salas[codigo];
+    if (!sala || sala.jugadores[0] !== socket.id) return; // solo el anfitrión
+    if (sala.game) return socket.emit('error', 'Partida en curso');
+    if (!esBot(sala, botId)) return;
+
+    sala.jugadores = sala.jugadores.filter(id => id !== botId);
+    delete sala.nombres[botId];
+    sala.bots.delete(botId);
+
+    io.to(codigo).emit('jugadorUnido', { jugadores: infoJugadores(sala) });
   });
 
   socket.on('iniciarJuego', (opciones) => {
@@ -579,7 +916,10 @@ io.on('connection', socket => {
       sala.jugadores = sala.jugadores.filter(id => id !== socket.id);
       delete sala.nombres[socket.id];
       if (sala.jugadores.length === 0) delete salas[codigo];
-      else io.to(codigo).emit('jugadorUnido', { jugadores: sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] })) });
+      else {
+        limpiarSalaSiSinHumanos(codigo);
+        if (salas[codigo]) io.to(codigo).emit('jugadorUnido', { jugadores: infoJugadores(sala) });
+      }
     }
   });
 
@@ -613,8 +953,8 @@ io.on('connection', socket => {
         if (sala.tokens) delete sala.tokens[socket.id];
         if (sala.jugadores.length === 0) delete salas[codigo];
         else {
-          const jugadoresInfo = sala.jugadores.map(id => ({ id, nombre: sala.nombres[id] }));
-          io.to(codigo).emit('jugadorUnido', { jugadores: jugadoresInfo });
+          limpiarSalaSiSinHumanos(codigo);
+          if (salas[codigo]) io.to(codigo).emit('jugadorUnido', { jugadores: infoJugadores(sala) });
         }
       }
     }

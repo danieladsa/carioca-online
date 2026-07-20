@@ -288,6 +288,11 @@ select:focus { border-color: var(--gold); }
   font-size: 0.85rem; display: flex; align-items: center; gap: 8px;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; flex-shrink: 0; }
+.quitar-bot {
+  margin-left: auto; cursor: pointer; color: rgba(245,240,232,0.4);
+  font-size: 0.8rem; padding: 2px 6px; border-radius: 6px;
+}
+.quitar-bot:hover { color: var(--red); background: rgba(192,57,43,0.15); }
 
 #msg-error {
   background: rgba(192,57,43,0.2); border: 1px solid rgba(192,57,43,0.5);
@@ -664,6 +669,21 @@ select:focus { border-color: var(--gold); }
 #overlay-fin.visible { display: flex; }
 #overlay-fin h2 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 2rem; }
 #overlay-fin p { color: rgba(245,240,232,0.7); font-size: 0.9rem; }
+
+/* ── Overlay ronda ganada (aparece un momento entre rondas) ── */
+#overlay-ronda {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: none; align-items: center; justify-content: center;
+  z-index: 250; pointer-events: none; text-align: center; padding: 20px;
+}
+#overlay-ronda.visible { display: flex; }
+#overlay-ronda h2 {
+  font-family: 'Playfair Display', serif; font-weight: 900; color: var(--gold);
+  font-size: 3.2rem; line-height: 1.2; letter-spacing: 0.02em;
+  text-shadow: 0 2px 30px rgba(201,168,76,0.5);
+  animation: rondaGanadaPop 0.35s ease-out;
+}
+@keyframes rondaGanadaPop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .tabla-puntos {
   background: rgba(0,0,0,0.3); border: 1px solid rgba(201,168,76,0.3);
   border-radius: 12px; padding: 16px 24px;
@@ -693,6 +713,7 @@ select:focus { border-color: var(--gold); }
 }
 @media (max-width: 600px) {
   h1 { font-size: 2rem; }
+  #overlay-ronda h2 { font-size: 2rem; }
   :root { --card-w: 46px; --card-h: 66px; }
   .carta-val { font-size: 0.85rem; }
   .carta-palo { font-size: 1.1rem; }
@@ -797,6 +818,7 @@ select:focus { border-color: var(--gold); }
     </div>
     <p style="font-size:0.75rem;color:rgba(245,240,232,0.4)" data-i18n="compartir">Comparte el código con tus amigos</p>
     <div id="lista-jugadores"></div>
+    <button class="btn btn-sm btn-outline" id="btn-agregar-bot" data-i18n="agregarBot" onclick="agregarBot()" style="display:none">🤖 Agregar bot</button>
     <div id="opciones-modo" style="display:none; flex-direction:column; gap:12px;">
       <div>
         <label class="campo-label" data-i18n="modoJuego">Modo de juego</label>
@@ -923,6 +945,11 @@ select:focus { border-color: var(--gold); }
   <button class="btn" data-i18n="nuevaPartida" onclick="location.reload()">Nueva partida</button>
 </div>
 
+<!-- ── OVERLAY RONDA GANADA (aparece un momento y desaparece solo) ── -->
+<div id="overlay-ronda">
+  <h2 id="ronda-titulo">—</h2>
+</div>
+
 <!-- ── AVISO DE TURNO (centro) ── -->
 <div id="aviso-turno"><span data-i18n="tuTurnoAviso">¡Es tu turno!</span></div>
 
@@ -974,6 +1001,7 @@ const I18N = {
     continuar: 'Continuar →', crearSala: 'Crear sala nueva', o: '── o ──', codigoSala: 'Código de sala',
     unirse: 'Unirse a sala →', sala: 'Sala:', copiar: 'Copiar', compartir: 'Comparte el código con tus amigos',
     iniciar: '▶ Iniciar partida', esperandoAnfitrion: 'Esperando al anfitrión...', modoJuego: 'Modo de juego',
+    agregarBot: '🤖 Agregar bot', quitarBot: 'Quitar bot',
     partidaCompleta: 'Partida completa (12 etapas)', modoLibreOpt: 'Modo libre — 1 etapa a elección', etapaJugar: 'Etapa a jugar',
     ronda: 'Ronda', modoLibre: '🎯 Modo libre', tuTurno: '✦ Tu turno', turnoDe: 'Turno de {n}',
     robaCarta: 'Roba una carta', juegaOTira: 'Juega o tira', esperando: 'Esperando...',
@@ -1008,6 +1036,7 @@ const I18N = {
     continuar: 'Continue →', crearSala: 'Create new room', o: '── or ──', codigoSala: 'Room code',
     unirse: 'Join room →', sala: 'Room:', copiar: 'Copy', compartir: 'Share the code with your friends',
     iniciar: '▶ Start game', esperandoAnfitrion: 'Waiting for the host...', modoJuego: 'Game mode',
+    agregarBot: '🤖 Add bot', quitarBot: 'Remove bot',
     partidaCompleta: 'Full game (12 stages)', modoLibreOpt: 'Free mode — pick 1 stage', etapaJugar: 'Stage to play',
     ronda: 'Round', modoLibre: '🎯 Free mode', tuTurno: '✦ Your turn', turnoDe: '{n}’s turn',
     robaCarta: 'Draw a card', juegaOTira: 'Play or discard', esperando: 'Waiting...',
@@ -1163,8 +1192,10 @@ socket.on('accionAnim', (a) => {
   const seatRect = () => { const s = document.querySelector(`.seat[data-jugador="${a.jugadorId}"]`); return s ? s.getBoundingClientRect() : null; };
   if (a.tipo === 'robar') {
     volarCarta(rectDe(a.origen === 'descarte' ? 'btn-descarte' : 'btn-mazo'), seatRect(), '<div class="carta-dorso-fly"></div>');
+    if (a.origen === 'mazo') sonarTomarCarta();
   } else if (a.tipo === 'tirar' && a.carta) {
     volarCarta(seatRect(), rectDe('btn-descarte'), cartaHTML(a.carta, false));
+    sonarDescartar();
   } else if (a.tipo === 'pegar' && a.carta) {
     const ownerSeat = document.querySelector(`.seat[data-jugador="${a.owner}"]`);
     const dst = a.owner === miId ? rectDe('celda-mine') : (ownerSeat ? ownerSeat.getBoundingClientRect() : null);
@@ -1209,11 +1240,17 @@ function mostrarSala(codigo, jugadores) {
   }
 }
 
+function agregarBot() { socket.emit('agregarBot'); }
+function quitarBot(botId) { socket.emit('quitarBot', { botId }); }
+
 function renderJugadoresLobby(jugadores) {
   const el = document.getElementById('lista-jugadores');
-  el.innerHTML = jugadores.map(j =>
-    `<div class="jugador-item"><span class="dot"></span>${j.nombre}${j.id === miId ? ' (tú)' : ''}</div>`
-  ).join('');
+  el.innerHTML = jugadores.map(j => {
+    const quitar = soyAnfitrion && j.bot ? `<span class="quitar-bot" onclick="quitarBot('${j.id}')" title="${t('quitarBot')}">✕</span>` : '';
+    return `<div class="jugador-item"><span class="dot"></span>${j.bot ? '🤖 ' : ''}${j.nombre}${j.id === miId ? ' (tú)' : ''}${quitar}</div>`;
+  }).join('');
+  const btnBot = document.getElementById('btn-agregar-bot');
+  if (btnBot) btnBot.style.display = (soyAnfitrion && jugadores.length < 4) ? '' : 'none';
 }
 
 // ── Juego ─────────────────────────────────────────────────────────────────────
@@ -1222,6 +1259,7 @@ socket.on('juegoIniciado', () => {
   document.getElementById('screen-game').style.display = 'flex';
   document.getElementById('screen-game').style.flexDirection = 'column';
   guardarPartida(); // recordar la partida para reintegrarse si se cae la conexión
+  sonarIniciar();
 });
 
 socket.on('estado', (e) => {
@@ -1230,11 +1268,18 @@ socket.on('estado', (e) => {
   renderEstado();
 });
 
+let rondaGanadaTimer = null;
 socket.on('finRonda', ({ ganador, nombreGanador, puntos, ronda }) => {
-  toast(t('rondaFin', { r: ronda, n: nombreGanador }));
+  document.getElementById('ronda-titulo').textContent = t('rondaFin', { r: ronda, n: nombreGanador });
+  document.getElementById('overlay-ronda').classList.add('visible');
+  sonarGanar();
+  clearTimeout(rondaGanadaTimer);
+  rondaGanadaTimer = setTimeout(() => document.getElementById('overlay-ronda').classList.remove('visible'), 3500);
 });
 
 socket.on('finJuego', ({ ganador, nombre, puntos }) => {
+  clearTimeout(rondaGanadaTimer);
+  document.getElementById('overlay-ronda').classList.remove('visible');
   document.getElementById('fin-titulo').textContent = t('ganaJuego', { n: nombre });
   document.getElementById('fin-subtitulo').textContent = t('puntFinal');
   const rows = Object.entries(puntos)
@@ -1361,7 +1406,7 @@ function renderEstado() {
     const celdaDe = { top: celdaTop, left: celdaLeft, right: celdaRight };
     oponentes.forEach((id, i) => {
       const cell = celdaDe[areas[i]] || celdaTop;
-      const nombre = e.nombres[id] || id;
+      const nombre = (e.bots?.includes(id) ? '🤖 ' : '') + (e.nombres[id] || id);
       const cantCartas = e.manosAjenas[id] || 0;
       const etapaOp = e.etapas[id] || 0;
       const bajado = e.bajadasEtapa[id] ? t('bajo') : '';
@@ -1820,16 +1865,35 @@ function rectMano() {
   const m = cont ? cont.getBoundingClientRect() : null; if (!m) return null;
   return { left: m.left + m.width / 2 - 25, top: m.top, width: 50, height: 72 };
 }
+const SND_TOMAR_CARTA = new Audio('/take_card.mp3');
+function sonarTomarCarta() {
+  try { SND_TOMAR_CARTA.currentTime = 0; SND_TOMAR_CARTA.play().catch(() => {}); } catch (e) {}
+}
+const SND_DESCARTAR = new Audio('/descartar.mp3');
+function sonarDescartar() {
+  try { SND_DESCARTAR.currentTime = 0; SND_DESCARTAR.play().catch(() => {}); } catch (e) {}
+}
+const SND_INICIAR = new Audio('/start_game.mp3');
+function sonarIniciar() {
+  try { SND_INICIAR.currentTime = 0; SND_INICIAR.play().catch(() => {}); } catch (e) {}
+}
+const SND_GANAR = new Audio('/win.mp3');
+function sonarGanar() {
+  try { SND_GANAR.currentTime = 0; SND_GANAR.play().catch(() => {}); } catch (e) {}
+}
+
 function animarRobo(origen) {
   const src = rectDe(origen === 'descarte' ? 'btn-descarte' : 'btn-mazo');
   const dst = rectMano();
   let inner = '<div class="carta-dorso-fly"></div>';
   if (origen === 'descarte' && estado?.descarte?.length) inner = cartaHTML(estado.descarte[estado.descarte.length - 1], false);
   volarCarta(src, dst, inner);
+  if (origen === 'mazo') sonarTomarCarta();
 }
 function animarTirar(cartaEl, carta) {
   const src = cartaEl ? cartaEl.getBoundingClientRect() : rectMano();
   volarCarta(src, rectDe('btn-descarte'), cartaHTML(carta, false));
+  sonarDescartar();
 }
 function animarPegar(cartaEl, comboEl, carta) {
   const src = cartaEl ? cartaEl.getBoundingClientRect() : rectMano();
